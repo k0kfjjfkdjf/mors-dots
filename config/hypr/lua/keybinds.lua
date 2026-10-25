@@ -6,6 +6,22 @@ local menu        = "rofi -show drun"
 local function key(k) return mainMod .. " + " .. k end
 local exec = hl.dsp.exec_cmd
 
+-- Переключатель полного экрана без «смешанных» состояний:
+-- из любого фуллскрина возвращаемся в обычное окно, из обычного — входим в нужный режим.
+-- internal=2 — окно на весь экран поверх панели; client=2 — приложению сказано "фуллскрин"
+-- (игры, браузер прячет вкладки), client=1 — "развёрнуто" (вкладки остаются).
+local function fsToggle(internal, client)
+    return function()
+        local w = hl.get_active_window()
+        if not w then return end
+        if w.fullscreen ~= 0 or w.fullscreen_client ~= 0 then
+            hl.dispatch(hl.dsp.window.fullscreen_state({ internal = 0, client = 0, action = "set" }))
+        else
+            hl.dispatch(hl.dsp.window.fullscreen_state({ internal = internal, client = client, action = "set" }))
+        end
+    end
+end
+
 -- Приложения
 hl.bind(key("Q"),            exec(terminal))
 hl.bind(key("E"),            exec(fileManager))
@@ -19,11 +35,8 @@ hl.bind("Print",             exec("flameshot gui"))   -- клавиша PrintScr
 -- Окна
 hl.bind(key("C"),            hl.dsp.window.close())
 hl.bind(key("V"),            hl.dsp.window.float({ action = "toggle" }))
--- настоящий полный экран: приложению говорим "фуллскрин" (игры, браузер прячет вкладки)
-hl.bind(key("F"),            hl.dsp.window.fullscreen_state({ internal = 2, client = 2, action = "toggle" }))
--- на весь экран поверх панели; приложению говорим "развёрнуто" (не F11),
--- поэтому браузер оставляет вкладки, а переключатель честно входит и выходит
-hl.bind(key("SHIFT + F"),    hl.dsp.window.fullscreen_state({ internal = 2, client = 1, action = "toggle" }))
+hl.bind(key("F"),            fsToggle(2, 2))   -- настоящий полный экран (игры, браузер без вкладок)
+hl.bind(key("SHIFT + F"),    fsToggle(2, 1))   -- поверх панели, вкладки остаются
 hl.bind(key("M"),            exec("command -v hyprshutdown >/dev/null 2>&1 && hyprshutdown || hyprctl dispatch 'hl.dsp.exit()'"))
 
 -- Группы (вкладки)
