@@ -7,6 +7,7 @@ if not ok then
         group_active = "rgba(cba6f7ee)", group_inactive = "rgba(313244aa)",
         groupbar_active = "rgba(cba6f7ff)", groupbar_inactive = "rgba(313244ff)",
         groupbar_locked = "rgba(f38ba8ff)", groupbar_text = "rgba(ffffffff)",
+        groupbar_text_inactive = "rgba(ffffffff)",
     }
 end
 
@@ -59,7 +60,8 @@ hl.config({
         groupbar = {
             height        = 18,
             font_size     = 11,
-            text_color    = t.groupbar_text,
+            text_color          = t.groupbar_text,
+            text_color_inactive = t.groupbar_text_inactive,
             gradients     = true,
             render_titles = true,
             scrolling     = true,

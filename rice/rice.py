@@ -174,6 +174,7 @@ return {{
     groupbar_inactive = "{rgba(t.surface0)}",
     groupbar_locked   = "{rgba(t.red)}",
     groupbar_text     = "{rgba(t.crust)}",
+    groupbar_text_inactive = "{rgba(t.text)}",
 }}
 '''
     write(CFG / "hypr/lua/theme.lua", lua)
