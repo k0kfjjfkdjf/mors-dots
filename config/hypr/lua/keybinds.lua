@@ -20,10 +20,10 @@ hl.bind("Print",             exec("flameshot gui"))   -- клавиша PrintScr
 hl.bind(key("C"),            hl.dsp.window.close())
 hl.bind(key("V"),            hl.dsp.window.float({ action = "toggle" }))
 -- настоящий полный экран: приложению говорим "фуллскрин" (игры, браузер прячет вкладки)
-hl.bind(key("F"),            hl.dsp.window.fullscreen_state({ internal = 2, client = 2 }))
+hl.bind(key("F"),            hl.dsp.window.fullscreen_state({ internal = 2, client = 2, action = "toggle" }))
 -- на весь экран поверх панели; приложению говорим "развёрнуто" (не F11),
 -- поэтому браузер оставляет вкладки, а переключатель честно входит и выходит
-hl.bind(key("SHIFT + F"),    hl.dsp.window.fullscreen_state({ internal = 2, client = 1 }))
+hl.bind(key("SHIFT + F"),    hl.dsp.window.fullscreen_state({ internal = 2, client = 1, action = "toggle" }))
 hl.bind(key("M"),            exec("command -v hyprshutdown >/dev/null 2>&1 && hyprshutdown || hyprctl dispatch 'hl.dsp.exit()'"))
 
 -- Группы (вкладки)
