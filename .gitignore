@@ -1,0 +1,19 @@
+# генерирует rice.py при смене темы
+config/hypr/lua/theme.lua
+config/kitty/theme.conf
+config/rofi/colors.rasi
+config/fish/conf.d/rice-theme.fish
+rice/current
+rice/wallpaper-index.json
+
+# машинное: ссылку создаёт install.sh
+config/hypr/lua/host.lua
+
+# личное, не для публичного репо
+rice/wallpapers/local/*
+!rice/wallpapers/local/.gitkeep
+config/fastfetch/images/
+config/fish/fish_variables
+
+__pycache__/
+*.rice-tmp

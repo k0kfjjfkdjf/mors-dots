@@ -1,0 +1,5 @@
+#!/bin/sh
+# Свой Xsetup для SDDM: сначала штатный, затем расстановка мониторов.
+/usr/share/sddm/scripts/Xsetup
+/usr/bin/python3 /etc/sddm/monitors.py 2>>/var/log/sddm-monitors.log
+exit 0

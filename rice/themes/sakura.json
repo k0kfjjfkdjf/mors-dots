@@ -1,0 +1,69 @@
+{
+  "name": "Sakura",
+  "description": "Тёмная пастельно-розовая: слива, розовый, белый",
+  "palette": {
+    "crust": "#120d11",
+    "mantle": "#171116",
+    "base": "#1c151b",
+    "base2": "#221a21",
+    "surface0": "#2c222b",
+    "surface1": "#3a2d38",
+    "surface2": "#4a3a47",
+    "overlay0": "#6b5868",
+    "overlay1": "#85707f",
+    "overlay2": "#a08a99",
+    "subtext0": "#c7b3bf",
+    "subtext1": "#e0cfd8",
+    "text": "#f7ecf2",
+    "rosewater": "#ffe4ec",
+    "flamingo": "#f9c6d3",
+    "pink": "#f5a9c8",
+    "mauve": "#e3b3e8",
+    "red": "#f2849e",
+    "maroon": "#e89aab",
+    "peach": "#f7b9a1",
+    "yellow": "#f6dcb0",
+    "green": "#b8e3c4",
+    "teal": "#a8dcd5",
+    "sky": "#b9d8f0",
+    "sapphire": "#a7c4e8",
+    "blue": "#c3b8f0",
+    "lavender": "#f8c8dc"
+  },
+  "accent": {
+    "primary": "pink",
+    "secondary": "mauve",
+    "tertiary": "rosewater"
+  },
+  "ansi": [
+    "#2c222b",
+    "#f2849e",
+    "#a9dcb8",
+    "#f3d39b",
+    "#b7a6ee",
+    "#f5a9c8",
+    "#a3d7d2",
+    "#e0cfd8",
+    "#5a4757",
+    "#f7a1b5",
+    "#c3ebcf",
+    "#f8e3bd",
+    "#cdc1f5",
+    "#f9c6dc",
+    "#c0e6e2",
+    "#fff5fa"
+  ],
+  "border": [
+    "#f5a9c8ee",
+    "#e3b3e8ee"
+  ],
+  "border_inactive": "#3a2d38aa",
+  "border_angle": 45,
+  "border_loop": false,
+  "wallpaper": "sakura.png",
+  "wallpapers": [
+    "local/sakura-lineart.png",
+    "local/sakura-dusk.png",
+    "sakura.png"
+  ]
+}

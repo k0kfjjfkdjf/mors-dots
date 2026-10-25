@@ -1,0 +1,77 @@
+# Официальные репозитории Arch. Строки с # и пустые игнорируются.
+
+# --- база для сборки AUR
+base-devel
+git
+unzip
+
+# --- Hyprland
+hyprland
+xdg-desktop-portal-hyprland
+hyprlock
+hypridle
+hyprpicker
+qt5-wayland
+qt6-wayland
+
+# --- панель, обои, уведомления, меню
+awww
+rofi
+dart-sass
+libnotify
+network-manager-applet
+networkmanager
+
+# --- терминал и оболочка
+kitty
+fish
+fastfetch
+
+# --- KDE-приложения и их тема под Hyprland (чинит Dolphin)
+dolphin
+ark
+kate
+archlinux-xdg-menu
+plasma-integration
+breeze
+breeze-gtk
+breeze-icons
+polkit-kde-agent
+
+# --- экран входа (sddm-astronaut-theme)
+sddm
+qt6-svg
+qt6-virtualkeyboard
+qt6-multimedia-ffmpeg
+xorg-xrandr
+
+# --- звук, яркость, медиа-клавиши
+pipewire
+pipewire-pulse
+wireplumber
+brightnessctl
+playerctl
+
+# --- скриншоты и буфер обмена
+flameshot
+grim
+slurp
+wl-clipboard
+cliphist
+
+# --- скрипты (уведомления о герцовке на GTK3)
+python
+python-gobject
+gtk3
+
+# --- шрифты
+ttf-jetbrains-mono-nerd
+ttf-roboto
+ttf-dejavu
+noto-fonts
+noto-fonts-cjk
+noto-fonts-emoji
+
+# --- разное
+xdg-utils
+xdg-user-dirs

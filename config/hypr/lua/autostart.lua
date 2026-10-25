@@ -1,0 +1,8 @@
+hl.on("hyprland.start", function()
+    hl.exec_cmd("/usr/lib/polkit-kde-authentication-agent-1")
+    hl.exec_cmd("nm-applet --indicator")
+    hl.exec_cmd("hyprpanel")
+    -- обои текущей темы (rice сам поднимет awww/swww-daemon)
+    hl.exec_cmd("python3 ~/.config/rice/rice.py wallpaper")
+    -- hl.exec_cmd("env QT_QPA_PLATFORM=xcb AmneziaVPN")
+end)

@@ -1,0 +1,4 @@
+# AUR (ставится через yay). Строки с # и пустые игнорируются.
+
+ags-hyprpanel-git
+sddm-astronaut-theme

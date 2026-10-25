@@ -1,0 +1,70 @@
+{
+  "name": "Aurora",
+  "description": "Северное сияние: тёмно-синий, сине-фиолетовый, зелёный, белый, градиенты",
+  "palette": {
+    "crust": "#070a1a",
+    "mantle": "#0a0e22",
+    "base": "#0d1229",
+    "base2": "#111733",
+    "surface0": "#18203f",
+    "surface1": "#222b52",
+    "surface2": "#2e3866",
+    "overlay0": "#4a5585",
+    "overlay1": "#6470a0",
+    "overlay2": "#8590bd",
+    "subtext0": "#aeb6dc",
+    "subtext1": "#cdd3f0",
+    "text": "#eef1ff",
+    "rosewater": "#f0e6ff",
+    "flamingo": "#e0b8ff",
+    "pink": "#d58cff",
+    "mauve": "#a77bff",
+    "red": "#ff6b8b",
+    "maroon": "#ff8fa8",
+    "peach": "#ffb38a",
+    "yellow": "#ffe08a",
+    "green": "#5cf2a6",
+    "teal": "#3fe0c8",
+    "sky": "#6fd3ff",
+    "sapphire": "#4fa8ff",
+    "blue": "#5c7cff",
+    "lavender": "#9aa8ff"
+  },
+  "accent": {
+    "primary": "lavender",
+    "secondary": "mauve",
+    "tertiary": "green"
+  },
+  "ansi": [
+    "#18203f",
+    "#ff6b8b",
+    "#5cf2a6",
+    "#ffe08a",
+    "#5c7cff",
+    "#a77bff",
+    "#6fd3ff",
+    "#cdd3f0",
+    "#4a5585",
+    "#ff8fa8",
+    "#8bf7c0",
+    "#fff0b8",
+    "#8ea3ff",
+    "#c6a8ff",
+    "#a3e4ff",
+    "#ffffff"
+  ],
+  "border": [
+    "#5c7cffee",
+    "#a77bffee",
+    "#5cf2a6ee"
+  ],
+  "border_inactive": "#222b52aa",
+  "border_angle": 45,
+  "border_loop": true,
+  "wallpaper": "aurora.png",
+  "wallpapers": [
+    "local/aurora-arch.png",
+    "local/aurora-rei.png",
+    "aurora.png"
+  ]
+}

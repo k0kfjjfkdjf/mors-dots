@@ -1,0 +1,66 @@
+#!/bin/bash
+
+MODEL="qwen2.5-coder:7b"
+LOG_DIR="$HOME/.ollama/logs"
+HISTORY_FILE="$HOME/.ollama/chat_memory.txt"
+MAX_LOG_SIZE=$((10*1024*1024*1024))  # 10 ГБ
+
+mkdir -p "$LOG_DIR"
+mkdir -p "$(dirname "$HISTORY_FILE")"
+touch "$HISTORY_FILE"  # создаём файл, если его нет
+
+# --- Очистка истории, если превышает лимит ---
+cleanup_history() {
+    current_size=$(stat -c%s "$HISTORY_FILE" 2>/dev/null || echo 0)
+    if [ "$current_size" -gt "$MAX_LOG_SIZE" ]; then
+        echo "Очистка истории (превышен 10 ГБ)"
+        rm -f "$HISTORY_FILE"
+        touch "$HISTORY_FILE"
+    fi
+}
+cleanup_history
+
+# --- Проверяем процессы Ollama ---
+OLLA_PID=$(pgrep -x ollama)
+if [ -n "$OLLA_PID" ]; then
+    echo "Обнаружены процессы Ollama (PID: $OLLA_PID). Завершаем их..."
+    pkill -x ollama
+    echo "Процессы Ollama завершены."
+    exit 0
+fi
+
+# --- Сбор контекста ---
+CONTEXT_FILE=$(mktemp)
+{
+    echo "--- Системная информация ---"
+    uname -a
+    lscpu
+    free -h
+    [ -f "$HOME/.config/hypr/hyprland.conf" ] && head -n 50 "$HOME/.config/hypr/hyprland.conf"
+    pacman -Qe
+    systemctl --failed
+} > "$CONTEXT_FILE"
+
+# --- Запуск сервера Ollama в фоне ---
+echo "Запускаем сервер Ollama в фоне..."
+ollama serve &
+SERVER_PID=$!
+
+# Ждём готовности сервера
+for i in {1..20}; do
+    ollama list &>/dev/null && break
+    sleep 1
+done
+
+# --- Скачиваем модель, если её нет ---
+if ! ollama list | grep -q "$MODEL"; then
+    echo "Скачиваем модель $MODEL..."
+    ollama pull "$MODEL"
+fi
+
+# --- Запуск модели с контекстом и памятью ---
+echo "Запуск локального ИИ с подгрузкой контекста и памятью 10 ГБ..."
+(cat "$HISTORY_FILE"; cat "$CONTEXT_FILE") | ollama run "$MODEL" &
+
+echo "Локальный ИИ запущен. Сервер Ollama работает в фоне."
+rm "$CONTEXT_FILE"
