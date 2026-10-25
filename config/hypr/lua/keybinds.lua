@@ -14,6 +14,7 @@ hl.bind(key("R"),            exec(menu))
 hl.bind(key("P"),            exec("discord"))
 hl.bind(key("CTRL + L"),     exec("chromium"))
 hl.bind(key("CTRL + J"),     exec("flameshot gui"))
+hl.bind("Print",             exec("flameshot gui"))   -- клавиша PrintScreen
 
 -- Окна
 hl.bind(key("C"),            hl.dsp.window.close())
