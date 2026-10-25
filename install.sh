@@ -59,6 +59,10 @@ ask() {  # ask "вопрос" "по умолчанию"
 [[ $EUID -ne 0 ]] || { echo "Запускай от обычного пользователя, не от root."; exit 1; }
 command -v pacman >/dev/null || { echo "Нужен Arch Linux (pacman)."; exit 1; }
 
+# install.sh делает скрипты исполняемыми — чтобы это не ломало будущие git pull,
+# велим git игнорировать смену бита исполняемости в этом клоне.
+git -C "$DOTS" config core.fileMode false 2>/dev/null || true
+
 STATE_DIR="$HOME/.config/mors-dots"
 mkdir -p "$STATE_DIR"
 BACKUP="$HOME/.config/mors-dots-backup/$(date +%F_%H%M%S)"
