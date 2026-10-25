@@ -7,7 +7,7 @@ hl.config({
         kb_rules     = "",
         follow_mouse = 1,
         sensitivity  = 0,
-        touchpad = { natural_scroll = false },
+        touchpad = { natural_scroll = true },   -- как на смартфоне: палец вниз → страница вверх
     },
 })
 
