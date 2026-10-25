@@ -20,7 +20,8 @@ hl.bind("Print",             exec("flameshot gui"))   -- клавиша PrintScr
 hl.bind(key("C"),            hl.dsp.window.close())
 hl.bind(key("V"),            hl.dsp.window.float({ action = "toggle" }))
 hl.bind(key("F"),            hl.dsp.window.fullscreen({ mode = "fullscreen" }))
-hl.bind(key("SHIFT + F"),    hl.dsp.window.fullscreen({ mode = "maximized" }))
+-- на весь экран поверх панели, но приложению не сообщаем (браузер оставляет вкладки)
+hl.bind(key("SHIFT + F"),    hl.dsp.window.fullscreen_state({ internal = 2, client = 0 }))
 hl.bind(key("M"),            exec("command -v hyprshutdown >/dev/null 2>&1 && hyprshutdown || hyprctl dispatch 'hl.dsp.exit()'"))
 
 -- Группы (вкладки)
