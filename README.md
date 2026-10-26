@@ -91,3 +91,17 @@ packages/    списки пакетов pacman и AUR
 rice/        переключатель тем, темы, обои, интеграция с SDDM
 install.sh   установщик
 ```
+
+## В разработке: конфигуратор
+
+В ветке [`configurator`](https://github.com/k0kfjjfkdjf/mors-dots/tree/configurator/configurator) —
+прототип «конфига для конфигов»: окно настроек строится по комментариям-разметке прямо в
+конфигах, есть русская копия настроек HyprPanel, цвета берутся из текущей темы rice.
+Прототип — один HTML-файл, открывается в браузере:
+[`configurator/prototype/configurator.html`](https://github.com/k0kfjjfkdjf/mors-dots/blob/configurator/configurator/prototype/configurator.html).
+
+```bash
+git -C ~/mors-dots fetch origin configurator
+git -C ~/mors-dots worktree add ~/mors-dots-configurator configurator
+xdg-open ~/mors-dots-configurator/configurator/prototype/configurator.html
+```
