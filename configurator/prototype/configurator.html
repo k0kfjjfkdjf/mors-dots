@@ -18,7 +18,7 @@
 html,body{margin:0;height:100%;background:var(--bg);color:var(--text);font:14px/1.45 Inter,system-ui,-apple-system,sans-serif}
 button{font:inherit}
 code,.mono{font-family:var(--mono);font-size:12px}
-.app{display:grid;grid-template-columns:260px minmax(0,1fr);height:100vh}
+.app{display:grid;grid-template-columns:260px minmax(0,1fr);height:calc(100vh / var(--z,1))}
 
 /* sidebar */
 aside{background:var(--panel);border-right:1px solid var(--border);display:flex;flex-direction:column;padding:14px 10px;gap:4px;overflow:auto}
@@ -57,7 +57,7 @@ body,aside,main,.topbar,.panel,.section,.hpwin,.btn,.row,.banner{transition:back
 kbd{font-family:var(--mono);font-size:10px;border:1px solid var(--border);border-bottom-width:2px;border-radius:4px;padding:0 4px;color:var(--muted)}
 
 /* main */
-main{display:flex;flex-direction:column;min-width:0;height:100vh}
+main{display:flex;flex-direction:column;min-width:0;height:calc(100vh / var(--z,1))}
 .topbar{display:flex;align-items:center;gap:12px;padding:10px 16px;border-bottom:1px solid var(--border);background:var(--panel);flex-wrap:wrap}
 .title h1{margin:0;font-size:16px}
 .title .path{font-family:var(--mono);font-size:12px;color:var(--muted)}
@@ -135,6 +135,51 @@ input[type=color]{width:34px;height:28px;border:1px solid var(--border);border-r
 .empty{padding:22px;text-align:center;color:var(--muted);border:1px dashed var(--border);border-radius:10px;line-height:1.7;margin-bottom:14px}
 .empty code{color:var(--ann)}
 .empty.err{color:var(--danger);border-color:color-mix(in srgb,var(--danger) 40%,var(--panel))}
+
+/* страница «Система» */
+.sysbtn{display:flex;align-items:center;gap:10px;padding:9px 10px;border-radius:8px;cursor:pointer;color:var(--text);border:1px solid transparent;background:none;width:100%;text-align:left;font-weight:600}
+.sysbtn:hover{background:var(--panel2)}
+.sysbtn.active{background:var(--panel2);border-color:var(--border)}
+.sysbtn .ic{width:26px;height:26px;border-radius:7px;display:grid;place-items:center;background:color-mix(in srgb,var(--accent) 18%,var(--panel));color:var(--accent);font-size:15px}
+.sysbtn small{display:block;font-weight:400;color:var(--muted);font-size:11px}
+.sysview{flex:1;overflow:auto;padding:20px;min-height:0}
+.sysview[hidden],.content[hidden]{display:none!important}
+.syswrap{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
+.card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px 18px}
+.card h2{margin:0 0 4px;font-size:15px}
+.card .sub{color:var(--muted);font-size:12.5px;margin-bottom:14px}
+.themes{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:12px}
+.tcard{border:1px solid var(--border);border-radius:11px;overflow:hidden;cursor:pointer;background:var(--bg);text-align:left;padding:0;color:var(--text);font:inherit;position:relative}
+.tcard:hover{border-color:var(--surf2)}
+.tcard.cur{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.tcard .pv{height:74px;position:relative;padding:10px}
+.tcard .pv .bar{height:12px;border-radius:4px;margin-bottom:8px}
+.tcard .pv .win{position:absolute;left:10px;right:44%;bottom:10px;top:30px;border-radius:5px;border:2px solid}
+.tcard .pv .win2{position:absolute;left:60%;right:10px;bottom:10px;top:30px;border-radius:5px;border:2px solid}
+.tcard .tb{padding:9px 11px 11px}
+.tcard .tb b{display:flex;align-items:center;gap:6px}
+.tcard .tb span{display:block;font-size:11.5px;color:var(--muted);margin-top:2px;line-height:1.35}
+.tcard .tb .now{display:inline;margin:0;color:var(--onaccent);font-size:10px;font-weight:600;padding:1px 6px;border-radius:5px;background:var(--accent);color:var(--onaccent)}
+.tcard.busy{opacity:.6;pointer-events:none}
+.seg{display:flex;flex-wrap:wrap;gap:6px;align-items:center}
+.seg button{background:var(--bg);border:1px solid var(--border);color:var(--muted);border-radius:7px;padding:6px 11px;cursor:pointer;font:inherit;font-size:13px}
+.seg button.on{color:var(--onaccent);background:var(--accent);border-color:var(--accent)}
+.seg input[type=range]{width:180px}
+.seg .zv{font-family:var(--mono);font-size:12px;color:var(--text);min-width:44px}
+.kv{display:grid;grid-template-columns:auto 1fr;gap:4px 14px;font-size:13px;margin-bottom:14px}
+.kv dt{color:var(--muted)}.kv dd{margin:0;font-family:var(--mono);font-size:12px;overflow-wrap:anywhere}
+.actions{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.cmdline{display:flex;align-items:center;gap:8px;background:var(--bg);border:1px solid var(--border);border-radius:8px;padding:7px 10px;font-family:var(--mono);font-size:12px;margin-top:10px}
+.cmdline code{flex:1;min-width:0;overflow-wrap:anywhere}
+.cmdline .btn{flex:none}
+.term{background:var(--bg);border:1px solid var(--border);border-radius:8px;font-family:var(--mono);font-size:12px;padding:8px 10px;max-height:240px;overflow:auto;margin-top:12px;white-space:pre-wrap;color:var(--muted)}
+.term:empty{display:none}
+.term .ok{color:var(--ok)}.term .err{color:var(--danger)}.term .c{color:var(--text)}
+.pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:3px 9px;border-radius:20px;background:var(--bg);border:1px solid var(--border)}
+.pill i{width:7px;height:7px;border-radius:50%;background:var(--dim)}
+.pill.on i{background:var(--ok)}.pill.off i{background:var(--danger)}
+.modebadge{font-size:11px;color:var(--muted);padding:2px 8px;border:1px dashed var(--border);border-radius:6px}
+.democfg .meta div:first-child::after{content:" · демо";color:var(--dim);font-weight:400;font-size:11px}
 
 /* копия окна HyprPanel */
 .hpchk{display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;white-space:nowrap}
@@ -266,6 +311,7 @@ textarea.raw{display:block;width:100%;height:calc(100% - 36px);min-height:300px;
 <div class="app">
   <aside>
     <div class="brand"><div class="logo">#@</div><div><b>Конфигуратор</b><small>прототип интерфейса</small></div></div>
+    <button class="sysbtn" id="sysBtn"><span class="ic">⚙</span><span>Система<small>тема · масштаб · обновление</small></span></button>
     <div class="navlabel">Конфиги</div>
     <div id="cfglist"></div>
     <button class="cfg addbtn" id="addCfg">＋ Добавить конфиг</button>
@@ -276,13 +322,15 @@ textarea.raw{display:block;width:100%;height:calc(100% - 36px);min-height:300px;
     <div class="topbar">
       <div class="title"><h1 id="tName"></h1><div class="path" id="tPath"></div></div>
       <div class="spacer"></div>
+      <span class="modebadge" id="modeBadge"></span>
       <div class="status" id="status"></div>
       <label class="livewrap" id="liveWrap"><span class="switch"><input type="checkbox" id="liveToggle" checked><span></span></span>Живой предпросмотр</label>
       <button class="btn" id="undoBtn" title="Отменить (Ctrl+Z)">↶</button>
       <button class="btn" id="revertBtn">Откатить</button>
       <button class="btn primary" id="saveBtn">Сохранить</button>
     </div>
-    <div class="content">
+    <div class="sysview" id="sysview" hidden></div>
+    <div class="content" id="content">
       <div class="form" id="form">
         <input class="search" id="search" placeholder="Поиск по всем файлам конфига…  ( / )">
         <div id="formBody"></div>
@@ -506,7 +554,8 @@ function applyTheme(id,announce){
   const r=document.documentElement.style;for(const k in v)r.setProperty('--'+k,v[k]);
   const meta=document.querySelector('meta[name=theme-color]');if(meta)meta.content=p.crust;
   renderThemeBox();
-  if(announce){toast(`Тема системы сменилась → ${t.name}`);riceRewriteHyprPanel(t);}
+  if(announce){toast(`Тема системы сменилась → ${t.name}`);if(!BRIDGE)riceRewriteHyprPanel(t);}
+  if(state.view==='system')renderSystem();
 }
 /* То же, что делает rice.py apply_hyprpanel(): шаблон Catppuccin → ближайший слот палитры → цвет темы.
    Программа видит, что config.json изменился на диске, и перечитывает его. */
@@ -524,9 +573,8 @@ function riceRewriteHyprPanel(t){
 }
 function renderThemeBox(){const t=RICE.themes[riceCurrent],p=t.palette,el=document.getElementById('themebox');if(!el)return;
   el.innerHTML=`<div class="tn">🎨 ${esc(t.name)}</div><div class="sw">${['crust','surface1',t.accent.primary,t.accent.secondary,t.accent.tertiary,'green','red'].map(k=>`<i style="background:${p[k]||k}"></i>`).join('')}</div>
-    Цвета берутся из темы rice и меняются вместе с ней.<small>~/.config/rice/current</small>
-    <div class="simrow" title="Имитация rice.py apply — в программе это происходит само">${Object.keys(RICE.themes).map(k=>`<button class="btn small" data-sim="${k}" ${k===riceCurrent?'disabled':''}>${esc(RICE.themes[k].name)}</button>`).join('')}</div>`;
-  el.querySelectorAll('[data-sim]').forEach(b=>b.onclick=()=>applyTheme(b.dataset.sim,true));}
+    Цвета программы = тема системы.<small>сменить → «Система»</small>`;
+  el.style.cursor='pointer';el.onclick=()=>openSystem();}
 const HP_SCHEMA=HP.opts.map(e=>({...e,key:e.k,name:e.t,desc:e.s,section:e.h,type:'hp:'+e.ty}));
 const HP_RICE=HP.opts.filter(e=>e.r).length;
 
@@ -542,7 +590,7 @@ const configs=[
 configs.forEach(c=>c.history=[]);
 
 let cur=configs[0];
-const state={tab:'src',file:0,parsed:null,filter:'',live:true,log:[],capturing:null,lastPush:{},collapsed:new Set(),hp:{tab:'config',page:0,hideRice:false}};
+const state={view:'cfg',tab:'src',file:0,parsed:null,filter:'',live:true,log:[],capturing:null,lastPush:{},collapsed:new Set(),hp:{tab:'config',page:0,hideRice:false}};
 
 /* ---------- разбор ---------- */
 function parseMarkup(cfg,d){
@@ -646,7 +694,7 @@ function setValue(g,nv,opts={}){
   else{const lines=d.text.split('\n');const v=it.quoted?it.quoted+nv+it.quoted:nv;lines[it.line]=it.pre+it.keyRaw+it.sep+v+it.post;d.text=lines.join('\n');}
   state.parsed=parseCur();state.file=it.fi;
   if(opts.rerender)renderForm();else markRows();
-  if(cur.hp)hpMarkRow(g);
+  if(cur.hp){hpMarkRow(g);if(BRIDGE&&state.live)hpScheduleWrite();}
   renderChips();renderPane(state.parsed.items[g].line);renderTop();renderSidebar();livePreview(state.parsed.items[g],nv);
 }
 function savedValue(it){const d=cur.files[it.fi];let s;try{s=(d._sp&&d._sp.t===d.saved)?d._sp.o:(d._sp={t:d.saved,o:JSON.parse(d.saved)}).o;}catch(e){return undefined;}
@@ -669,6 +717,7 @@ function resetItem(g){const it=state.parsed.items[g],d=cur.files[it.fi];pushHist
 function undo(){const e=cur.history.pop();if(!e){toast('Нечего отменять');return;}
   cur.files[e.fi].text=e.text;state.lastPush={};state.file=e.fi;state.parsed=parseCur();renderAll();toast(`Отменено · ${base(cur.files[e.fi].path)}`);}
 function save(){const ch=cur.files.filter(dirtyDoc);if(!ch.length)return;
+  if(BRIDGE&&cur.hp){hpWriteNow(true);return;}
   ch.forEach(d=>d.saved=d.text);cur.history=[];renderAll();
   toast(`Сохранено: ${ch.map(d=>base(d.path)).join(', ')} · резервные копии *.bak`);
   if(cur.live&&state.live)addLog(null,null,'Hyprland перечитал конфиг автоматически');}
@@ -692,7 +741,7 @@ function renderLog(){const el=$('#log');let h='<div class="hd">Журнал пр
 /* ---------- отрисовка ---------- */
 function renderSidebar(){
   $('#cfglist').innerHTML=configs.map((c,i)=>{
-    let h=`<button class="cfg ${c===cur?'active':''}" data-i="${i}">
+    let h=`<button class="cfg ${c===cur&&state.view!=='system'?'active':''} ${BRIDGE&&!c.hp?'democfg':''}" data-i="${i}" ${BRIDGE&&!c.hp?'title="Демо-данные: этот конфиг пока не подключён к настоящим файлам"':''}>
       <div class="meta"><div>${esc(c.name)}</div><div>${c.files.length>1?`${c.files.length} файлов · `:''}${esc(c.files[0].path)}</div></div>
       ${dirtyCfg(c)?'<span class="dot" title="Есть несохранённые изменения"></span>':''}
       <span class="badge ${c.mode==='adapter'?'adapter':''}">${c.mode==='adapter'?'адаптер':esc(c.comment+c.marker)}</span></button>`;
@@ -703,6 +752,7 @@ function renderSidebar(){
     }
     return h;}).join('');
   $$('#cfglist .cfg').forEach(b=>b.onclick=()=>selectConfig(configs[+b.dataset.i]));
+  $('#sysBtn').classList.toggle('active',state.view==='system');
   $$('#cfglist .subfile[data-fi]').forEach(b=>b.onclick=()=>focusFile(+b.dataset.fi));
   const a=$('#sideAddFile');if(a)a.onclick=openFileModal;
 }
@@ -713,6 +763,9 @@ function focusFile(fi){
   const g=document.getElementById('fg-'+fi);if(g){g.scrollIntoView({block:'start',behavior:'smooth'});g.classList.add('pulse');setTimeout(()=>g.classList.remove('pulse'),900);}
 }
 function renderTop(){
+  $('#modeBadge').textContent=BRIDGE?'':'прототип в браузере';$('#modeBadge').style.display=BRIDGE?'none':'';
+  $$('#status,#liveWrap,#undoBtn,#revertBtn,#saveBtn').forEach(e=>e.style.display=state.view==='system'?'none':'');
+  if(state.view==='system'){$('#tName').textContent='Система';$('#tPath').textContent=BRIDGE?SYS.dots||'':'тема · масштаб · обновление райса';return;}
   $('#tName').textContent=cur.name;
   $('#tPath').textContent=cur.files.length>1?`${cur.files[0].path}  +${cur.files.length-1} подключённых`:cur.files[0].path;
   const ch=cur.files.filter(dirtyDoc),n=ch.reduce((s,d)=>s+diffLines(d),0),st=$('#status');
@@ -720,7 +773,7 @@ function renderTop(){
   st.innerHTML=n?`<span class="dot"></span>Изменено строк: ${n}${cur.files.length>1?` · файлов: ${ch.length}`:''}`:'✓ Сохранено';
   $('#saveBtn').disabled=!n;$('#revertBtn').disabled=!n;$('#undoBtn').disabled=!cur.history.length;
   const lw=$('#liveWrap');lw.classList.toggle('off',!cur.live);$('#liveToggle').disabled=!cur.live;
-  lw.title=cur.live?'Изменения сразу применяются через hyprctl, файл пишется только при сохранении':(cur.liveNote||'');
+  lw.title=cur.live==='file'?'Каждое изменение сразу пишется в config.json — HyprPanel применяет его сам':cur.live?'Изменения сразу применяются через hyprctl, файл пишется только при сохранении':(cur.liveNote||'');
 }
 function startLabel(){const s=cur.start;
   if(s.mode==='marker')return `после <code>${esc(s.begin)}</code>`;
@@ -981,7 +1034,7 @@ gaps_in = 5</pre>
   <h3>Что редактор гарантирует</h3>
   <p>Меняется только значение в строке. Комментарии, отступы и строки без разметки остаются байт-в-байт. Сохраняются только изменённые файлы, перед записью каждого — резервная копия.</p></div>`;}
 function renderAll(flash){renderSidebar();renderTop();renderForm();renderTabs();renderChips();renderPane(flash);renderLog();}
-function selectConfig(c){if(state.capturing)stopCapture();cur=c;state.file=0;state.filter='';$('#search').value='';state.log=[];state.parsed=parseCur();renderAll();$('#form').scrollTop=0;}
+function selectConfig(c){if(state.capturing)stopCapture();if(state.view==='system')closeSystem();cur=c;state.file=0;state.filter='';$('#search').value='';state.log=[];state.parsed=parseCur();renderAll();$('#form').scrollTop=0;}
 
 /* ---------- модалка конфига ---------- */
 let modalEdit=false;
@@ -1065,6 +1118,125 @@ function closeModals(){$$('.modal-bg').forEach(m=>m.classList.remove('open'));}
 $$('[data-close]').forEach(b=>b.onclick=closeModals);
 $$('.modal-bg').forEach(bg=>bg.addEventListener('mousedown',e=>{if(e.target===bg)closeModals();}));
 
+/* ---------- мост к оболочке mors-settings (GTK + WebKit + Python) ----------
+   В окне программы есть window.webkit.messageHandlers.mors — через него Python выполняет
+   rice.py apply, git pull, пишет config.json HyprPanel и присылает события (смена темы и т.п.).
+   В обычном браузере моста нет: всё работает как демо и показывает команды. */
+const BRIDGE=(()=>{
+  const h=window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.mors;if(!h)return null;
+  let n=0;const wait={};
+  window.__morsReply=(id,ok,data)=>{const w=wait[id];if(!w)return;delete wait[id];ok?w.res(data):w.rej(new Error(data));};
+  window.__morsEvent=ev=>onBridgeEvent(ev);
+  return {call:(cmd,args={})=>new Promise((res,rej)=>{const id=++n;wait[id]={res,rej};h.postMessage(JSON.stringify({id,cmd,args}));})};
+})();
+const SYS={dots:'',repo:null,gear:null,busy:'',term:[],needInstall:false};
+const hpCfg=()=>configs.find(c=>c.hp);
+function hpLoadText(text,path){const c=hpCfg(),d=c.files[0];if(path)d.path=path;
+  const dirty=d.text!==d.saved;d.saved=text;if(!dirty)d.text=text;
+  if(c===cur&&state.view!=='system'){state.parsed=parseCur();renderAll();}else renderSidebar();
+  return dirty;}
+async function bootBridge(){
+  if(!BRIDGE)return;
+  try{
+    const st=await BRIDGE.call('state');
+    SYS.dots=st.dots;SYS.repo=st.repo;SYS.gear=st.gear;
+    const c=hpCfg();c.live='file';c.liveNote='';
+    if(st.hyprpanel&&st.hyprpanel.text!=null)hpLoadText(st.hyprpanel.text,st.hyprpanel.path);
+    if(st.zoom)applyZoom(st.zoom,false);
+    if(st.theme&&RICE.themes[st.theme])applyTheme(st.theme);
+    if(st.open==='system')openSystem();
+    renderAll();
+  }catch(e){toast('Оболочка не ответила: '+e.message,true);}
+}
+function onBridgeEvent(ev){
+  if(ev.type==='theme'&&RICE.themes[ev.name]&&ev.name!==riceCurrent)applyTheme(ev.name,true);
+  if(ev.type==='hyprpanel'){const dirty=hpLoadText(ev.text);if(ev.external)setTimeout(()=>toast(dirty?'config.json HyprPanel изменился на диске — твои несохранённые правки не тронуты':'config.json HyprPanel обновлён с диска'),900);}
+  if(ev.type==='open'&&ev.page==='system')openSystem();
+  if(ev.type==='log'){termAdd(ev.text,ev.kind);}
+}
+let hpTimer=null;
+function hpScheduleWrite(){clearTimeout(hpTimer);hpTimer=setTimeout(()=>hpWriteNow(false),350);}
+async function hpWriteNow(manual){clearTimeout(hpTimer);const c=hpCfg(),d=c.files[0],text=d.text;
+  try{const r=await BRIDGE.call('writeHyprPanel',{text});d.saved=text;if(c===cur){markRows();renderTop();renderPane();}renderSidebar();
+    addLog('hpw',null,`config.json записан${r&&r.backup?' · резервная копия '+r.backup:''} — HyprPanel применил`);if(manual)toast('Сохранено');}
+  catch(e){toast('Не удалось записать config.json: '+e.message,true);}}
+
+/* ---------- масштаб ---------- */
+const ZOOMS=[80,90,100,110,125,150];
+function loadZoom(){try{return +localStorage.getItem('mors-zoom')||100;}catch(e){return 100;}}
+let zoom=100;
+function applyZoom(z,persist=true){z=Math.max(60,Math.min(200,Math.round(z)));zoom=z;
+  document.documentElement.style.zoom=z/100;document.documentElement.style.setProperty('--z',z/100);
+  if(persist){try{localStorage.setItem('mors-zoom',z);}catch(e){}if(BRIDGE)BRIDGE.call('setZoom',{zoom:z}).catch(()=>{});}
+  if(state.view==='system')renderSystemZoom();}
+
+/* ---------- страница «Система» ---------- */
+function openSystem(){if(state.capturing)stopCapture();state.view='system';$('#content').hidden=true;$('#sysview').hidden=false;renderSidebar();renderTop();renderSystem();
+  if(BRIDGE)BRIDGE.call('state').then(st=>{SYS.repo=st.repo;SYS.gear=st.gear;renderSystem();}).catch(()=>{});}
+function closeSystem(){state.view='cfg';$('#sysview').hidden=true;$('#content').hidden=false;}
+function termAdd(text,kind){SYS.term.push({text,kind});if(SYS.term.length>400)SYS.term.splice(0,SYS.term.length-400);
+  const el=document.getElementById('term');if(el){el.insertAdjacentHTML('beforeend',termLine(SYS.term[SYS.term.length-1]));el.scrollTop=el.scrollHeight;}}
+const termLine=l=>`<div class="${l.kind||''}">${esc(l.text)}</div>`;
+function themePreview(t){const p=t.palette,acc=t.accent,a=p[acc.primary]||acc.primary,b=p[acc.secondary]||acc.secondary,bd=t.border.map(x=>x.slice(0,7));
+  return `<div class="pv" style="background:${p.crust}"><div class="bar" style="background:${p.mantle};box-shadow:inset 0 0 0 1px ${p.surface0}"></div>
+    <div class="win" style="background:${p.base};border-image:linear-gradient(135deg,${bd.join(',')}) 1"></div><div class="win2" style="background:${p.base};border-color:${p.surface1}"></div></div>`;}
+function renderSystem(){
+  const el=$('#sysview'),r=SYS.repo,demo=!BRIDGE;
+  const themes=Object.entries(RICE.themes).map(([k,t])=>`<button class="tcard ${k===riceCurrent?'cur':''} ${SYS.busy==='theme:'+k?'busy':''}" data-theme="${k}">
+      ${themePreview(t)}<div class="tb"><b>${esc(t.name)} ${k===riceCurrent?'<span class="now">сейчас</span>':''}</b><span>${esc(t.description||'')}</span></div></button>`).join('');
+  el.innerHTML=`<div class="syswrap">
+    <section class="card"><h2>Тема системы</h2>
+      <div class="sub">Применяется ко всему райсу сразу — Hyprland, HyprPanel, kitty, rofi, GTK/Qt, fish, обои, экран входа. То же, что <code>rice.py apply</code> и <kbd>Super</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd>.${demo?' <b>В браузере — имитация.</b>':''}</div>
+      <div class="themes">${themes}</div></section>
+    <section class="card"><h2>Масштаб интерфейса</h2>
+      <div class="sub">Размер всего в окне настроек. Применяется сразу. <kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>Ctrl</kbd>+<kbd>−</kbd> / <kbd>Ctrl</kbd>+<kbd>0</kbd>.</div>
+      <div class="seg" id="zoomSeg"></div></section>
+    <section class="card"><h2>Обновление райса</h2>
+      <div class="sub">Скачивает свежую версию mors-dots с GitHub (<code>git pull</code>), заново применяет текущую тему и перечитывает Hyprland. Твои настройки в <code>~/.config</code> не трогаются.</div>
+      ${r?`<dl class="kv"><dt>Папка</dt><dd>${esc(SYS.dots)}</dd><dt>Ветка</dt><dd>${esc(r.branch||'?')}</dd><dt>Версия</dt><dd>${esc((r.commit||'').slice(0,7))} · ${esc(r.subject||'')}${r.date?' · '+esc(r.date):''}</dd>${r.dirty?`<dt>Внимание</dt><dd>в папке есть локальные изменения (${r.dirty}) — обновление их не тронет, но может отказаться, если они мешают</dd>`:''}</dl>`:''}
+      <div class="actions"><button class="btn primary" id="updBtn" ${SYS.busy?'disabled':''}>${SYS.busy==='update'?'Обновляю…':'⟳ Обновить райс с GitHub'}</button>
+        ${SYS.needInstall?'<button class="btn" id="instBtn">Запустить установщик в терминале</button>':''}</div>
+      ${demo?`<div class="cmdline"><code>git -C ~/mors-dots pull --ff-only && python3 ~/.config/rice/rice.py apply "$(python3 ~/.config/rice/rice.py current)" && hyprctl reload</code><button class="btn small" data-copy="upd">Копировать</button></div>`:''}
+      <div class="term" id="term">${SYS.term.map(termLine).join('')}</div></section>
+    <section class="card"><h2>Кнопка настроек в HyprPanel</h2>
+      <div class="sub">Шестерёнка 󰒓 в панели управления (аватарка слева вверху) открывает эти настройки вместо окна HyprPanel. Сам HyprPanel не меняется — небольшой скрипт ловит его окно настроек и подменяет нашим.</div>
+      <div class="actions">${SYS.gear==null?'<span class="pill">статус неизвестен</span>':SYS.gear?'<span class="pill on"><i></i>подмена работает</span>':'<span class="pill off"><i></i>скрипт не запущен</span>'}
+        ${BRIDGE&&SYS.gear===false?'<button class="btn small" id="gearStart">Запустить</button>':''}
+        <button class="btn small" id="hpOrig">Открыть оригинальное окно HyprPanel</button></div></section>
+  </div>`;
+  renderSystemZoom();
+  el.querySelectorAll('[data-theme]').forEach(b=>b.onclick=()=>setSystemTheme(b.dataset.theme));
+  $('#updBtn').onclick=updateRice;
+  const ib=$('#instBtn');if(ib)ib.onclick=()=>BRIDGE.call('runInstaller').then(()=>toast('Установщик открыт в kitty')).catch(e=>toast(e.message,true));
+  const gs=$('#gearStart');if(gs)gs.onclick=()=>BRIDGE.call('startGear').then(()=>{SYS.gear=true;renderSystem();});
+  $('#hpOrig').onclick=()=>BRIDGE?BRIDGE.call('openHyprPanelSettings').catch(e=>toast(e.message,true)):toast('В программе откроется родное окно HyprPanel (подмена на него не сработает)');
+  el.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>{const t=b.previousElementSibling.textContent;try{navigator.clipboard.writeText(t);toast('Команда скопирована');}catch(e){toast(t);}});
+  const term=$('#term');if(term)term.scrollTop=term.scrollHeight;
+}
+function renderSystemZoom(){const el=$('#zoomSeg');if(!el)return;
+  el.innerHTML=ZOOMS.map(z=>`<button class="${z===zoom?'on':''}" data-z="${z}">${z}%</button>`).join('')+`<input type="range" min="60" max="200" step="5" value="${zoom}" id="zoomR"><span class="zv">${zoom}%</span>`;
+  el.querySelectorAll('[data-z]').forEach(b=>b.onclick=()=>applyZoom(+b.dataset.z));
+  $('#zoomR').onchange=e=>applyZoom(+e.target.value);$('#zoomR').oninput=e=>{el.querySelector('.zv').textContent=e.target.value+'%';};}
+async function setSystemTheme(k){if(k===riceCurrent||SYS.busy)return;
+  if(!BRIDGE){termAdd(`$ rice.py apply ${k}`,'c');applyTheme(k,true);termAdd(`✓ тема ${RICE.themes[k].name} (имитация)`,'ok');return;}
+  SYS.busy='theme:'+k;renderSystem();termAdd(`$ rice.py apply ${k}`,'c');
+  try{const r=await BRIDGE.call('applyTheme',{name:k});termAdd(r.ok?`✓ тема ${RICE.themes[k].name} применена`:`✗ rice.py завершился с ошибкой (${r.code})`,r.ok?'ok':'err');
+    if(r.ok&&k!==riceCurrent)applyTheme(k,true);}
+  catch(e){termAdd('✗ '+e.message,'err');}
+  SYS.busy='';renderSystem();}
+async function updateRice(){if(SYS.busy)return;
+  if(!BRIDGE){termAdd('$ git -C ~/mors-dots pull --ff-only','c');termAdd('(в браузере команды не выполняются — скопируй строку выше и запусти в терминале)');return;}
+  SYS.busy='update';SYS.needInstall=false;renderSystem();
+  try{const r=await BRIDGE.call('updateRice');SYS.repo=r.repo||SYS.repo;SYS.needInstall=!!r.needInstall;
+    termAdd(r.message,r.ok?'ok':'err');if(r.needInstall)termAdd('! изменились пакеты или установщик — нажми «Запустить установщик в терминале»','err');}
+  catch(e){termAdd('✗ '+e.message,'err');}
+  SYS.busy='';renderSystem();}
+$('#sysBtn').onclick=()=>state.view==='system'?selectConfig(cur):openSystem();
+document.addEventListener('keydown',e=>{if(!(e.ctrlKey||e.metaKey))return;
+  if(e.key==='='||e.key==='+'){e.preventDefault();applyZoom(zoom+10);}
+  else if(e.key==='-'){e.preventDefault();applyZoom(zoom-10);}
+  else if(e.key==='0'){e.preventDefault();applyZoom(100);}});
+
 /* ---------- общее ---------- */
 let toastT;function toast(msg,warn){const t=$('#toast');t.textContent=msg;t.className='toast show'+(warn?' warn':'');clearTimeout(toastT);toastT=setTimeout(()=>t.className='toast',2800);}
 $('#addCfg').onclick=()=>openModal(false);
@@ -1084,7 +1256,7 @@ document.addEventListener('keydown',e=>{
   if(e.key==='/'&&!typing){e.preventDefault();$('#search').focus();}
 },true);
 
-state.parsed=parseCur();renderAll();applyTheme(riceCurrent);
+state.parsed=parseCur();renderAll();applyTheme(riceCurrent);applyZoom(loadZoom(),false);bootBridge();
 </script>
 </body>
 </html>

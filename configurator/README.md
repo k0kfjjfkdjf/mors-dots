@@ -4,13 +4,28 @@
 правит в файле только нужное значение. Сейчас здесь **кликабельный HTML-прототип** — проверяем
 интерфейс, прежде чем писать саму программу.
 
-## Как посмотреть
+## Как запустить
 
-Открыть [`prototype/configurator.html`](prototype/configurator.html) в браузере — ничего ставить не нужно.
+**Как программу** (настоящая тема, обновление, запись настроек HyprPanel):
+
+```bash
+sudo pacman -S --needed webkit2gtk-4.1          # окно на GTK + WebKit
+~/mors-dots/configurator/app/mors-settings      # или шестерёнка в панели управления HyprPanel
+```
+
+**Как прототип в браузере** — только посмотреть интерфейс, команды не выполняются:
 
 ```bash
 xdg-open ~/mors-dots/configurator/prototype/configurator.html
 ```
+
+## Шестерёнка в HyprPanel
+
+Кнопка 󰒓 в панели управления (аватарка слева вверху) зашита в код HyprPanel и открывает
+его окно настроек. Код не трогаем: `app/gear-redirect.py` слушает события Hyprland и, как
+только появляется окно `hyprpanel-settings`, закрывает его и открывает `mors-settings`.
+Запускается из `config/hypr/lua/autostart.lua`. Родное окно HyprPanel можно открыть
+кнопкой на странице «Система».
 
 ## Что уже есть в прототипе
 
@@ -23,14 +38,21 @@ xdg-open ~/mors-dots/configurator/prototype/configurator.html
 - **HyprPanel на русском.** Полная копия его окна настроек: 871 настройка, 26 страниц,
   перевод всех строк. Код HyprPanel не меняется — правится только `config.json`.
   Цвета, которые перезаписывает `rice.py`, помечены «тема».
+- **Система.** Тема всего райса (то же, что `rice.py apply`), масштаб интерфейса,
+  кнопка «Обновить райс с GitHub»: `git pull --ff-only` → `rice.py apply <текущая>` →
+  `hyprctl reload`; если изменились пакеты или установщик — предложит запустить `install.sh`.
 - **Цвета из темы rice.** Программа красится в текущую тему (`rice/current` →
   `rice/themes/<тема>.json`) и перекрашивается сама при смене темы. В прототипе смену
-  имитируют кнопки в углу; при этом пересчитываются и цвета HyprPanel — так же, как в `rice.py`.
+  имитируют карточки тем на странице «Система»; при этом пересчитываются и цвета HyprPanel —
+  так же, как в `rice.py`. В программе окно следит за `rice/current` и `config.json` само.
 
 ## Структура
 
 ```
 configurator/
+├── app/
+│   ├── mors-settings           окно GTK + WebKit: интерфейс + мост к rice.py, git, config.json
+│   └── gear-redirect.py        шестерёнка HyprPanel → mors-settings
 ├── prototype/
 │   ├── configurator.src.html   исходник интерфейса (данные подставляет build.py)
 │   └── configurator.html       собранный прототип — его и открывать

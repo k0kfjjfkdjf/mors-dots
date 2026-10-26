@@ -1,0 +1,304 @@
+#!/usr/bin/env python3
+"""mors-settings — окно настроек райса.
+
+Интерфейс — configurator/prototype/configurator.html в окне GTK + WebKit;
+Python выполняет то, что из браузера сделать нельзя:
+  • тема всей системы  → rice.py apply <тема>
+  • обновление райса   → git pull --ff-only + rice.py apply <текущая> + hyprctl reload
+  • HyprPanel          → чтение/запись ~/.config/hyprpanel/config.json (с резервной копией)
+  • слежка за rice/current и config.json — окно перекрашивается и перечитывает файл само.
+
+    mors-settings              открыть (второй запуск поднимает уже открытое окно)
+    mors-settings --system     открыть сразу на странице «Система»
+
+Нужны: python-gobject, gtk3, webkit2gtk-4.1.
+"""
+import datetime, hashlib, json, os, pathlib, shutil, subprocess, sys, threading
+
+APP_ID = 'io.github.k0kfjjfkdjf.MorsSettings'
+HERE = pathlib.Path(__file__).resolve().parent              # configurator/app
+DOTS = HERE.parent.parent                                   # корень mors-dots
+RICE = DOTS / 'rice'
+UI = HERE.parent / 'prototype/configurator.html'
+HOME = pathlib.Path.home()
+HP_CONFIG = HOME / '.config/hyprpanel/config.json'
+STATE_DIR = pathlib.Path(os.environ.get('XDG_CONFIG_HOME', HOME / '.config')) / 'mors-settings'
+CACHE_DIR = pathlib.Path(os.environ.get('XDG_CACHE_HOME', HOME / '.cache')) / 'mors-settings'
+BYPASS = CACHE_DIR / 'allow-hyprpanel-settings'             # см. gear-redirect.py
+
+
+# ======================================================================== команды (без GTK)
+def run(cmd, cwd=None, timeout=600):
+    p = subprocess.run(cmd, cwd=cwd, capture_output=True, text=True, timeout=timeout)
+    return p.returncode, (p.stdout + p.stderr).strip()
+
+
+def git(*args):
+    return run(['git', '-C', str(DOTS), *args], timeout=180)
+
+
+class Backend:
+    def __init__(self, log=lambda text, kind='': None):
+        self.log = log                      # потоковый вывод в «терминал» страницы «Система»
+        self.last_hp_hash = None            # чтобы не принимать собственную запись за внешнюю
+        self.backed_up = False
+
+    # ---------------------------------------------------------------- состояние
+    def settings(self):
+        try:
+            return json.loads((STATE_DIR / 'settings.json').read_text())
+        except Exception:
+            return {}
+
+    def save_settings(self, **kw):
+        s = self.settings(); s.update(kw)
+        STATE_DIR.mkdir(parents=True, exist_ok=True)
+        (STATE_DIR / 'settings.json').write_text(json.dumps(s, ensure_ascii=False, indent=2))
+
+    def current_theme(self):
+        try:
+            return (RICE / 'current').read_text().strip()
+        except OSError:
+            return None
+
+    def repo(self):
+        if not (DOTS / '.git').exists():
+            return None
+        _, branch = git('rev-parse', '--abbrev-ref', 'HEAD')
+        _, info = git('log', '-1', '--format=%H%x1f%s%x1f%cd', '--date=format:%d.%m.%Y %H:%M')
+        commit, subject, date = (info.split('\x1f') + ['', '', ''])[:3]
+        _, dirty = git('status', '--porcelain', '--untracked-files=no')
+        return {'branch': branch, 'commit': commit, 'subject': subject, 'date': date,
+                'dirty': len([l for l in dirty.splitlines() if l.strip()])}
+
+    def gear_running(self):
+        try:
+            os.kill(int((CACHE_DIR / 'gear-redirect.pid').read_text()), 0)
+            return True
+        except (OSError, ValueError):
+            return False
+
+    def cmd_state(self, open=None):
+        hp = None
+        if HP_CONFIG.exists():
+            text = HP_CONFIG.read_text()
+            self.last_hp_hash = hashlib.sha1(text.encode()).hexdigest()
+            hp = {'path': '~/' + str(HP_CONFIG.relative_to(HOME)), 'text': text}
+        return {'dots': str(DOTS), 'theme': self.current_theme(), 'repo': self.repo(),
+                'hyprpanel': hp, 'zoom': self.settings().get('zoom', 100),
+                'gear': self.gear_running(), 'open': open}
+
+    # ---------------------------------------------------------------- тема
+    def rice(self, *args):
+        cmd = [sys.executable, str(RICE / 'rice.py'), *args]
+        self.log('$ rice.py ' + ' '.join(args), 'c')
+        p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
+        for line in p.stdout:
+            line = line.rstrip()
+            if line:
+                self.log(line)
+        return p.wait()
+
+    def cmd_applyTheme(self, name):
+        themes = {f.stem for f in (RICE / 'themes').glob('*.json')}
+        if name not in themes:
+            raise ValueError(f'нет темы «{name}»')
+        code = self.rice('apply', name)
+        return {'ok': code == 0, 'code': code}
+
+    # ---------------------------------------------------------------- обновление
+    def cmd_updateRice(self):
+        if not (DOTS / '.git').exists():
+            raise RuntimeError(f'{DOTS} — не git-репозиторий')
+        self.log('$ git fetch', 'c')
+        code, out = git('fetch', '--prune')
+        if code:
+            return {'ok': False, 'message': '✗ git fetch: ' + out, 'repo': self.repo()}
+        code, upstream = git('rev-parse', '--abbrev-ref', '@{u}')
+        if code:
+            return {'ok': False, 'message': '✗ у ветки нет upstream на GitHub', 'repo': self.repo()}
+        _, behind = git('rev-list', '--count', 'HEAD..@{u}')
+        if behind.strip() == '0':
+            return {'ok': True, 'message': '✓ уже последняя версия', 'repo': self.repo()}
+        _, changed = git('diff', '--name-only', 'HEAD', '@{u}')
+        changed = changed.splitlines()
+        self.log(f'новых коммитов: {behind.strip()}, файлов: {len(changed)}')
+        self.log(f'$ git pull --ff-only ({upstream})', 'c')
+        code, out = git('pull', '--ff-only')
+        for line in out.splitlines()[-8:]:
+            self.log(line)
+        if code:
+            return {'ok': False, 'message': '✗ git pull не прошёл — см. вывод выше', 'repo': self.repo()}
+        theme = self.current_theme()
+        if theme:
+            self.rice('apply', theme)
+        if shutil.which('hyprctl'):
+            self.log('$ hyprctl reload', 'c')
+            run(['hyprctl', 'reload'])
+        need = any(c.startswith(('packages/', 'install.sh', 'hosts/', 'rice/sddm')) for c in changed)
+        return {'ok': True, 'message': f'✓ обновлено до {self.repo()["commit"][:7]}', 'repo': self.repo(),
+                'needInstall': need}
+
+    def cmd_runInstaller(self):
+        term = shutil.which('kitty') or shutil.which('foot') or shutil.which('alacritty')
+        if not term:
+            raise RuntimeError('не нашёл терминал (kitty)')
+        script = f'{DOTS}/install.sh -y; echo; read -p "Готово. Enter — закрыть "'
+        subprocess.Popen([term, '-e', 'bash', '-c', script], start_new_session=True)
+        return True
+
+    # ---------------------------------------------------------------- HyprPanel
+    def cmd_writeHyprPanel(self, text):
+        json.loads(text)                                  # не пишем битый JSON
+        backup = None
+        if HP_CONFIG.exists() and not self.backed_up:
+            backup = HP_CONFIG.with_name(f'config.json.bak-{datetime.datetime.now():%Y%m%d-%H%M%S}')
+            shutil.copy2(HP_CONFIG, backup)
+            self.backed_up = True
+            backup = backup.name
+        HP_CONFIG.parent.mkdir(parents=True, exist_ok=True)
+        tmp = HP_CONFIG.with_suffix('.json.mors-tmp')
+        tmp.write_text(text)
+        self.last_hp_hash = hashlib.sha1(text.encode()).hexdigest()
+        os.replace(tmp, HP_CONFIG)                        # HyprPanel перечитает файл сам
+        return {'backup': backup}
+
+    def cmd_openHyprPanelSettings(self):
+        CACHE_DIR.mkdir(parents=True, exist_ok=True)
+        BYPASS.touch()                                    # gear-redirect пропустит одно открытие
+        run(['hyprpanel', 'toggleWindow', 'settings-dialog'])
+        return True
+
+    def cmd_startGear(self):
+        subprocess.Popen([sys.executable, str(HERE / 'gear-redirect.py')], start_new_session=True,
+                         stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+        return True
+
+    def cmd_setZoom(self, zoom):
+        self.save_settings(zoom=int(zoom))
+        return True
+
+
+# ======================================================================== окно
+def main():
+    import gi
+    gi.require_version('Gtk', '3.0')
+    for v in ('4.1', '4.0'):
+        try:
+            gi.require_version('WebKit2', v); break
+        except ValueError:
+            continue
+    else:
+        msg = 'Нужен пакет webkit2gtk-4.1:  sudo pacman -S webkit2gtk-4.1'
+        subprocess.run(['notify-send', 'mors-settings', msg]); sys.exit(msg)
+    from gi.repository import Gio, GLib, Gtk, WebKit2
+
+    GLib.set_prgname('mors-settings')
+    GLib.set_application_name('Настройки')
+
+    class App(Gtk.Application):
+        def __init__(self):
+            super().__init__(application_id=APP_ID, flags=Gio.ApplicationFlags.HANDLES_COMMAND_LINE)
+            self.win = self.view = None
+            self.monitors = []
+            self.backend = Backend(log=lambda text, kind='': self.emit({'type': 'log', 'text': text, 'kind': kind}))
+            self.open_page = None
+
+        # ---- JS <-> Python
+        def js(self, code):
+            if self.view:
+                self.view.run_javascript(code, None, None, None)
+
+        def emit(self, ev):
+            GLib.idle_add(self.js, f'window.__morsEvent&&window.__morsEvent({json.dumps(ev, ensure_ascii=False)})')
+
+        def reply(self, mid, ok, data):
+            GLib.idle_add(self.js, f'window.__morsReply({mid},{str(ok).lower()},{json.dumps(data, ensure_ascii=False)})')
+
+        def on_message(self, _manager, result):
+            try:
+                value = result.get_js_value().to_string()
+            except AttributeError:
+                value = result.to_string()
+            msg = json.loads(value)
+            if os.environ.get('MORS_DEBUG'):
+                print('bridge:', msg['cmd'], file=sys.stderr, flush=True)
+            fn = getattr(self.backend, 'cmd_' + msg['cmd'], None)
+
+            def work():
+                try:
+                    if not fn:
+                        raise ValueError('неизвестная команда ' + msg['cmd'])
+                    args = msg.get('args') or {}
+                    if msg['cmd'] == 'state':
+                        args = {'open': self.open_page}
+                        self.open_page = None
+                    self.reply(msg['id'], True, fn(**args))
+                except Exception as e:  # ошибка уходит в интерфейс тостом
+                    self.reply(msg['id'], False, str(e))
+            threading.Thread(target=work, daemon=True).start()
+
+        # ---- слежка за файлами
+        def watch(self, path, cb):
+            mon = Gio.File.new_for_path(str(path.parent)).monitor_directory(Gio.FileMonitorFlags.WATCH_MOVES, None)
+            def changed(_m, f, other, _event):
+                for x in (f, other):
+                    if x and x.get_basename() == path.name:
+                        GLib.timeout_add(250, lambda: (cb(), False)[1]); return
+            mon.connect('changed', changed)
+            self.monitors.append(mon)
+
+        def on_theme_file(self):
+            name = self.backend.current_theme()
+            if name:
+                self.emit({'type': 'theme', 'name': name})
+
+        def on_hp_file(self):
+            try:
+                text = HP_CONFIG.read_text()
+                json.loads(text)
+            except Exception:
+                return                                     # файл пишется прямо сейчас
+            h = hashlib.sha1(text.encode()).hexdigest()
+            if h != self.backend.last_hp_hash:
+                self.backend.last_hp_hash = h
+                self.emit({'type': 'hyprpanel', 'text': text, 'external': True})
+
+        # ---- жизненный цикл
+        def do_command_line(self, cmdline):
+            args = cmdline.get_arguments()[1:]
+            if '--system' in args:
+                self.open_page = 'system'
+            if self.win:
+                if self.open_page:
+                    self.emit({'type': 'open', 'page': self.open_page}); self.open_page = None
+                self.win.present()
+            else:
+                self.activate()
+            return 0
+
+        def do_activate(self):
+            if self.win:
+                self.win.present(); return
+            if not UI.exists():
+                sys.exit(f'Нет {UI} — собери: python {HERE.parent}/tools/build.py')
+            manager = WebKit2.UserContentManager()
+            manager.register_script_message_handler('mors')
+            manager.connect('script-message-received::mors', self.on_message)
+            self.view = WebKit2.WebView.new_with_user_content_manager(manager)
+            s = self.view.get_settings()
+            s.set_enable_developer_extras(True)
+            s.set_allow_file_access_from_file_urls(True)
+            self.view.load_uri(UI.as_uri())
+            self.win = Gtk.ApplicationWindow(application=self, title='Настройки')
+            self.win.set_default_size(1400, 880)
+            self.win.add(self.view)
+            self.win.show_all()
+            self.watch(RICE / 'current', self.on_theme_file)
+            self.watch(HP_CONFIG, self.on_hp_file)
+
+    sys.exit(App().run(sys.argv))
+
+
+if __name__ == '__main__':
+    main()
