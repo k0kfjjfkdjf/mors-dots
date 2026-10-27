@@ -23,7 +23,7 @@ local G = {
     workspace = true,
     --@name: Скорость свайпа | type: float | range: 0.5-2 | step: 0.1 | desc: Больше — стол переключается при более коротком движении
     workspace_scale = 1.0,
-    --@name: Scratchpad свайпом вверх | type: bool | desc: 3 пальца вверх — показать/спрятать стол magic (как SUPER + S)
+    --@name: Scratchpad свайпом вверх | type: bool | desc: 3 пальца вверх/низ — показать/спрятать стол magic (как SUPER + S)
     special = true,
 --@end
 
