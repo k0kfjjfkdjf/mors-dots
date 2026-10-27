@@ -54,7 +54,7 @@ if G.workspace then
     hl.gesture({ fingers = 3, direction = "horizontal", action = "workspace", scale = G.workspace_scale })
 end
 if G.special then
-    hl.gesture({ fingers = 3, direction = "up", action = "special", workspace_name = "magic" })
+    hl.gesture({ fingers = 3, direction = "vertical", action = "special", workspace_name = "magic" })
 end
 if G.fullscreen_fake then
     hl.gesture({ fingers = 4, direction = "up", action = fsToggle(2, 1) })
