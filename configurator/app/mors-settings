@@ -124,12 +124,45 @@ class Backend:
         _, changed = git('diff', '--name-only', 'HEAD', '@{u}')
         changed = changed.splitlines()
         self.log(f'новых коммитов: {behind.strip()}, файлов: {len(changed)}')
+        # Локальные правки в файлах, которые меняет обновление, — иначе git pull откажется.
+        _, dirty = git('diff', '--name-only', 'HEAD')
+        clash = sorted(set(dirty.split()) & set(changed))
+        stashed = []
+        for f in clash:
+            _, theirs = git('show', f'@{{u}}:{f}')
+            try:
+                same = (DOTS / f).read_text().rstrip('\n') == theirs.rstrip('\n')
+            except OSError:
+                same = False
+            if same:                                          # правка уже есть в новой версии
+                git('checkout', '--', f)
+            else:
+                stashed.append(f)
+        if stashed:
+            self.log(f'локальные правки в {", ".join(stashed)} — откладываю (git stash)')
+            code, out = git('stash', 'push', '-m', f'mors-settings: перед обновлением {datetime.datetime.now():%Y-%m-%d %H:%M}',
+                            '--', *stashed)
+            if code:
+                return {'ok': False, 'message': '✗ не получилось отложить правки: ' + out, 'repo': self.repo()}
         self.log(f'$ git pull --ff-only ({upstream})', 'c')
         code, out = git('pull', '--ff-only')
         for line in out.splitlines()[-8:]:
             self.log(line)
         if code:
+            if stashed:
+                git('stash', 'pop')                           # вернуть как было
             return {'ok': False, 'message': '✗ git pull не прошёл — см. вывод выше', 'repo': self.repo()}
+        kept_aside = []
+        if stashed:
+            code, out = git('stash', 'pop')
+            if code:                                          # правки конфликтуют с новой версией
+                git('reset', '-q', '--', *stashed)
+                git('checkout', '--', *stashed)
+                kept_aside = stashed
+                self.log(f'! твои правки в {", ".join(stashed)} не совпали с новой версией: оставлена новая, '
+                         f'твои сохранены в git stash (посмотреть: git -C {DOTS} stash show -p)', 'err')
+            else:
+                self.log(f'✓ твои правки в {", ".join(stashed)} возвращены поверх новой версии', 'ok')
         theme = self.current_theme()
         if theme:
             self.rice('apply', theme)
@@ -138,7 +171,7 @@ class Backend:
             run(['hyprctl', 'reload'])
         need = any(c.startswith(('packages/', 'install.sh', 'hosts/', 'rice/sddm')) for c in changed)
         return {'ok': True, 'message': f'✓ обновлено до {self.repo()["commit"][:7]}', 'repo': self.repo(),
-                'needInstall': need}
+                'needInstall': need, 'keptAside': kept_aside}
 
     def cmd_runInstaller(self):
         term = shutil.which('kitty') or shutil.which('foot') or shutil.which('alacritty')
