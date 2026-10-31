@@ -57,7 +57,11 @@ Hyprland, HyprPanel, kitty, rofi, Qt/KDE (Dolphin), GTK 3/4, fish, обоев и
 ```bash
 ~/.config/rice/rice.py wallpapers          # что нашлось у текущей темы
 ~/.config/rice/rice.py set-wallpaper x.png # поставить конкретные
+~/.config/rice/rice.py monitors            # мониторы и их обои
+~/.config/rice/rice.py monitor-wallpaper DP-2 x.png 0 0.1 0.8 0.8   # свои обои + кадр на один монитор
 ```
+
+Отдельные обои на каждый монитор и подгонку кадра удобнее делать в конфигураторе (ветка `configurator`).
 
 ## Клавиши
 

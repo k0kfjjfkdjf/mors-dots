@@ -5,6 +5,7 @@ config/rofi/colors.rasi
 config/fish/conf.d/rice-theme.fish
 rice/current
 rice/wallpaper-index.json
+rice/monitor-wallpapers.json
 
 # машинное: ссылку создаёт install.sh
 config/hypr/lua/host.lua

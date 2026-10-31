@@ -257,6 +257,29 @@ class Backend:
                 'files': [{'rel': str(f.relative_to(base)), 'uri': f.as_uri(), 'default': f.name == r.WP_DEFAULT} for f in files],
                 'current': str(cur.relative_to(base)) if cur else None, 'leftovers': left}
 
+    def cmd_monitors(self):
+        name = self.current_theme()
+        r = self._rice_mod()
+        files = r.theme_wallpapers(name) if name else []
+        cur = r.selected_wallpaper(name, files) if name else None
+        per = r.mon_state().get(name, {}) if name else {}
+        out = []
+        for m in r.monitors():
+            e = per.get(m['key'])
+            if e:
+                src = r.WP_DIR / name / e['file']
+                e = {**e, 'uri': src.as_uri() if src.exists() else None}
+            out.append({**m, 'entry': e})
+        return {'theme': name, 'monitors': out,
+                'default': {'rel': str(cur.relative_to(r.WP_DIR / name)), 'uri': cur.as_uri()} if cur else None}
+
+    def cmd_setMonitorWallpaper(self, key, rel=None, crop=None):
+        name = self.current_theme()
+        r = self._rice_mod()
+        r.set_monitor_wallpaper(name, key, rel, crop)
+        code = self.rice('wallpaper', 'fade')
+        return {'ok': code == 0}
+
     def cmd_setWallpaper(self, rel):
         code = self.rice('set-wallpaper', rel)
         return {'ok': code == 0}

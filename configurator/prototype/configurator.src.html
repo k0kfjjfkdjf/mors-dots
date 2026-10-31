@@ -175,6 +175,26 @@ input[type=color]{width:34px;height:28px;border:1px solid var(--border);border-r
 .term{background:var(--bg);border:1px solid var(--border);border-radius:8px;font-family:var(--mono);font-size:12px;padding:8px 10px;max-height:240px;overflow:auto;margin-top:12px;white-space:pre-wrap;color:var(--muted)}
 .term:empty{display:none}
 .term .ok{color:var(--ok)}.term .err{color:var(--danger)}.term .c{color:var(--text)}
+.monbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
+.monbar .btn.on{background:var(--accent);border-color:var(--accent);color:var(--onaccent)}
+.monmap{position:relative;width:100%;margin:0 auto 14px;background:var(--bg);border-radius:10px;border:1px solid var(--border)}
+.mon{position:absolute;box-sizing:border-box;border:2px solid var(--surf2);border-radius:5px;background-color:var(--panel2);background-repeat:no-repeat;cursor:pointer;padding:0;overflow:hidden;margin:0;transition:border-color .15s}
+.mon:hover{border-color:var(--muted)}
+.mon.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent);z-index:2}
+.mon span{position:absolute;left:0;right:0;bottom:0;padding:3px 6px;font-size:11px;font-family:var(--mono);color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.8));text-align:left;line-height:1.25}
+.mon small{display:block;font-size:9.5px;opacity:.85}
+.mon.own span{background:linear-gradient(transparent,color-mix(in srgb,var(--accent) 70%,#000))}
+.cropui{display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:16px;margin-bottom:14px;align-items:start}
+.cropbox{position:relative;display:inline-block;max-width:100%;justify-self:start;line-height:0;border-radius:8px;overflow:hidden;background:#000;user-select:none;touch-action:none}
+.cropbox img{display:block;max-width:100%;max-height:360px;width:auto;height:auto}
+.croprect{position:absolute;box-shadow:0 0 0 9999px rgba(0,0,0,.55);outline:2px solid var(--accent);cursor:move}
+.croprect i{position:absolute;inset:0;pointer-events:none}
+.croprect .g1{border-left:1px solid rgba(255,255,255,.25);border-right:1px solid rgba(255,255,255,.25);left:33.3%;right:33.3%}
+.croprect .g2{border-top:1px solid rgba(255,255,255,.25);border-bottom:1px solid rgba(255,255,255,.25);top:33.3%;bottom:33.3%}
+.cropside{display:flex;flex-direction:column;gap:8px}
+.cropside label{display:flex;align-items:center;gap:8px}
+.cropside input[type=range]{flex:1;width:auto}
+@media (max-width:1100px){.cropui{grid-template-columns:1fr}}
 .wps{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:12px}
 .wp{position:relative;aspect-ratio:16/9;border-radius:9px;overflow:hidden;border:2px solid var(--border);cursor:pointer;background:var(--bg);padding:0}
 .wp img{width:100%;height:100%;object-fit:cover;display:block}
@@ -1284,10 +1304,15 @@ function renderSystem(){
         <button class="btn small" id="hpOrig">Открыть оригинальное окно HyprPanel</button></div></section>
   </div>`;
   renderSystemZoom();
-  el.querySelectorAll('[data-wp]').forEach(b=>b.onclick=async()=>{const rel=b.dataset.wp;termAdd('$ rice.py set-wallpaper '+rel,'c');
-    try{await BRIDGE.call('setWallpaper',{rel});SYS.wp.current=rel;renderSystem();termAdd('✓ обои: '+rel,'ok');}catch(e){termAdd('✗ '+e.message,'err');}});
-  const wo=$('#wpOpen');if(wo)wo.onclick=()=>BRIDGE.call('openWallpaperFolder');
-  const wr=$('#wpReload');if(wr)wr.onclick=loadWallpapers;
+  el.querySelectorAll('[data-wp]').forEach(b=>b.onclick=async()=>{const rel=b.dataset.wp;
+    if(SYS.monSel&&SYS.monSel!=='all'){await setMonitorWallpaper(SYS.monSel,rel,null);renderSystem();return;}
+    termAdd('$ rice.py set-wallpaper '+rel,'c');
+    if(!BRIDGE){SYS.wp.current=rel;SYS.mon.default={rel,uri:wpUri(rel)};renderSystem();return;}
+    try{await BRIDGE.call('setWallpaper',{rel});SYS.wp.current=rel;if(SYS.mon)SYS.mon.default={rel,uri:wpUri(rel)};renderSystem();termAdd('✓ обои: '+rel,'ok');}catch(e){termAdd('✗ '+e.message,'err');}});
+  el.querySelectorAll('[data-mon]').forEach(b=>b.onclick=()=>{SYS.monSel=b.dataset.mon;renderSystem();});
+  bindCrop();
+  const wo=$('#wpOpen');if(wo)wo.onclick=()=>BRIDGE?BRIDGE.call('openWallpaperFolder'):toast('В программе откроется папка темы');
+  const wr=$('#wpReload');if(wr)wr.onclick=()=>{SYS._demoTheme=null;loadWallpapers();};
   el.querySelectorAll('[data-theme]').forEach(b=>b.onclick=()=>setSystemTheme(b.dataset.theme));
   $('#updBtn').onclick=updateRice;
   const ib=$('#instBtn');if(ib)ib.onclick=()=>BRIDGE.call('runInstaller').then(()=>toast('Установщик открыт в kitty')).catch(e=>toast(e.message,true));
@@ -1296,14 +1321,84 @@ function renderSystem(){
   el.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>{const t=b.previousElementSibling.textContent;try{navigator.clipboard.writeText(t);toast('Команда скопирована');}catch(e){toast(t);}});
   const term=$('#term');if(term)term.scrollTop=term.scrollHeight;
 }
+/* ---------- обои: галерея, мониторы, кадр ---------- */
+const MON_DEMO=[   // pc1 — для прототипа в браузере
+  {name:'HDMI-A-1',key:'BNQ BenQ FP93G 0x00004011',desc:'BenQ FP93G',w:1280,h:1024,x:0,y:0,scale:1,entry:null},
+  {name:'DP-2',key:'MKG MKF23F180 H80297Q8NSCQL',desc:'MKG MKF23F180',w:1920,h:1080,x:1280,y:0,scale:1,entry:null},
+  {name:'HDMI-A-2',key:'Samsung Electric Company SAMSUNG',desc:'Samsung TV',w:1920,h:1080,x:3200,y:0,scale:1,entry:null}];
+function demoImage(seed,t){const c=document.createElement('canvas');c.width=1600;c.height=900;const g=c.getContext('2d'),p=t.palette;
+  const gr=g.createLinearGradient(0,0,1600,900);gr.addColorStop(0,p.crust);gr.addColorStop(1,p[['base','surface0','mantle'][seed%3]]);g.fillStyle=gr;g.fillRect(0,0,1600,900);
+  const cols=[p[t.accent.primary]||p.pink,p[t.accent.secondary]||p.mauve,p.green,p.sky];
+  for(let i=0;i<7;i++){g.globalAlpha=.18+.05*i;g.fillStyle=cols[(i+seed)%4];g.beginPath();g.arc((i*331+seed*170)%1600,(i*211+seed*90)%900,60+((i*37+seed*13)%180),0,7);g.fill();}
+  g.globalAlpha=1;g.fillStyle=p.text;g.font='bold 64px sans-serif';g.fillText(['дюны','ночь','дымка'][seed%3],80,820);return c.toDataURL('image/jpeg',.8);}
+function demoWallpapers(){const t=RICE.themes[riceCurrent];if(SYS._demoTheme===riceCurrent&&SYS.wp)return;SYS._demoTheme=riceCurrent;
+  const files=['дюны.png','ночь.png','дымка.jpg'].map((rel,i)=>({rel,uri:demoImage(i,t),default:false}));
+  SYS.wp={theme:riceCurrent,dir:'~/.config/rice/wallpapers/'+riceCurrent,files,current:files[0].rel,leftovers:[]};
+  SYS.mon={theme:riceCurrent,monitors:MON_DEMO.map(m=>({...m,entry:null})),default:{rel:files[0].rel,uri:files[0].uri}};
+  if(!SYS.monSel)SYS.monSel='all';}
+const wpUri=rel=>{const f=(SYS.wp&&SYS.wp.files||[]).find(f=>f.rel===rel);return f&&f.uri;};
+function fullCrop(imgA,monA,z=1){let w=1,h=1;if(imgA>monA)w=monA/imgA;else h=imgA/monA;w/=z;h/=z;return[(1-w)/2,(1-h)/2,w,h];}
+function bgStyle(uri,crop){if(!uri)return '';if(!crop)return `background-image:url('${uri}');background-size:cover;background-position:center`;
+  const [x,y,w,h]=crop,px=w<1?x/(1-w)*100:0,py=h<1?y/(1-h)*100:0;
+  return `background-image:url('${uri}');background-size:${100/w}% ${100/h}%;background-position:${px}% ${py}%`;}
+function monMapHTML(){const mons=SYS.mon&&SYS.mon.monitors||[];if(!mons.length)return '';
+  const L=mons.map(m=>({m,x:m.x,y:m.y,w:m.w/m.scale,h:m.h/m.scale})),minx=Math.min(...L.map(o=>o.x)),miny=Math.min(...L.map(o=>o.y)),
+    bw=Math.max(...L.map(o=>o.x+o.w))-minx,bh=Math.max(...L.map(o=>o.y+o.h))-miny,def=SYS.mon.default;
+  const boxes=L.map(o=>{const e=o.m.entry,sel=SYS.monSel===o.m.key;
+    const st=e?bgStyle(e.uri||wpUri(e.file),e.crop):bgStyle(def&&def.uri,null);
+    return `<button class="mon ${sel?'sel':''} ${e?'own':''}" data-mon="${esc(o.m.key)}" title="${esc(o.m.key)}" style="left:${(o.x-minx)/bw*100}%;top:${(o.y-miny)/bh*100}%;width:${o.w/bw*100}%;height:${o.h/bh*100}%;${st}">
+      <span>${esc(o.m.name)}<small>${o.m.w}×${o.m.h}${e?' · свои':''}</small></span></button>`;}).join('');
+  return `<div class="monbar"><button class="btn small ${SYS.monSel==='all'?'on':''}" data-mon="all">Все мониторы</button><span class="note">${SYS.monSel==='all'?'Клик по картинке — обои для всех мониторов. Нажми на монитор, чтобы задать ему свои.':`Клик по картинке — обои только для ${esc((mons.find(m=>m.key===SYS.monSel)||{}).name||'')}.`}</span></div>
+    <div class="monmap" style="aspect-ratio:${bw}/${bh};max-width:min(100%,${Math.round(190*bw/bh)}px)">${boxes}</div>`;}
+function cropHTML(m){const e=m.entry;if(!e)return `<div class="note">У этого монитора общие обои. Выбери картинку ниже — она встанет только на него, и можно будет подогнать кадр.</div>`;
+  const uri=e.uri||wpUri(e.file);
+  return `<div class="cropui"><div class="cropbox" id="cropBox"><img id="cropImg" src="${esc(uri||'')}" alt="" draggable="false"><div class="croprect" id="cropRect"><i class="g1"></i><i class="g2"></i></div></div>
+    <div class="cropside"><b>${esc(m.name)}</b><span class="note">${m.w}×${m.h} · ${esc(e.file)}</span>
+      <div class="note">Тяни рамку мышью, колесо — масштаб. Рамка всегда в пропорциях монитора.</div>
+      <label class="note">Масштаб <input type="range" id="cropZoom" min="100" max="400" step="5" value="100"> <span id="cropZv">100%</span></label>
+      <div class="actions"><button class="btn small" id="cropFill">Заполнить</button><button class="btn small" id="cropCenter">По центру</button><button class="btn small" id="monReset">Как у всех</button></div>
+      <span class="note" id="cropInfo"></span></div></div>`;}
 function wallpapersHTML(){
-  if(!BRIDGE)return `<div class="cmdline"><code>~/.config/rice/rice.py wallpapers   # что нашлось у текущей темы</code></div><div class="note">В браузере файлы недоступны — в окне программы здесь будут превью, клик ставит обои.</div>`;
+  if(!BRIDGE)demoWallpapers();
   const w=SYS.wp;if(!w)return '<div class="note">Загружаю…</div>';
-  const items=w.files.map(f=>`<button class="wp ${f.rel===w.current?'cur':''}" data-wp="${esc(f.rel)}" title="${esc(f.rel)}"><img loading="lazy" src="${esc(f.uri)}" alt="">${f.rel===w.current?'<i class="badge2">сейчас</i>':''}<span>${esc(f.default?'сгенерированные':f.rel)}</span></button>`).join('');
-  return `${w.files.length?`<div class="wps">${items}</div>`:'<div class="empty">Папка пуста — положи сюда картинки</div>'}
+  const selMon=SYS.monSel&&SYS.monSel!=='all'&&SYS.mon?SYS.mon.monitors.find(m=>m.key===SYS.monSel):null;
+  const curRel=selMon?(selMon.entry&&selMon.entry.file):w.current;
+  const items=w.files.map(f=>`<button class="wp ${f.rel===curRel?'cur':''}" data-wp="${esc(f.rel)}" title="${esc(f.rel)}"><img loading="lazy" src="${esc(f.uri)}" alt="">${f.rel===curRel?`<i class="badge2">${selMon?'на мониторе':'сейчас'}</i>`:''}<span>${esc(f.default?'сгенерированные':f.rel)}</span></button>`).join('');
+  return `${monMapHTML()}${selMon?cropHTML(selMon):''}
+    ${w.files.length?`<div class="wps">${items}</div>`:'<div class="empty">Папка пуста — положи сюда картинки</div>'}
     ${w.leftovers&&w.leftovers.length?`<div class="note">В <code>wallpapers/local/</code> остались картинки без темы: ${w.leftovers.map(esc).join(', ')} — перенеси их в папку нужной темы.</div>`:''}
-    <div class="actions"><button class="btn" id="wpOpen">📁 Открыть папку темы</button><button class="btn" id="wpReload">⟳ Обновить список</button><span class="note">${esc(w.dir||'')}</span></div>`;}
-async function loadWallpapers(){if(!BRIDGE)return;try{SYS.wp=await BRIDGE.call('wallpapers');}catch(e){SYS.wp={files:[],dir:'',error:e.message};}if(state.view==='system')renderSystem();}
+    <div class="actions"><button class="btn" id="wpOpen">📁 Открыть папку темы</button><button class="btn" id="wpReload">⟳ Обновить список</button><span class="note">${esc(w.dir||'')}</span></div>
+    ${BRIDGE?'':'<div class="note">В браузере — пример с мониторами pc1 и нарисованными картинками; в окне программы здесь твои мониторы и обои.</div>'}`;}
+async function loadWallpapers(){if(!BRIDGE){SYS._demoTheme=null;demoWallpapers();if(state.view==='system')renderSystem();return;}
+  try{SYS.wp=await BRIDGE.call('wallpapers');}catch(e){SYS.wp={files:[],dir:'',error:e.message};}
+  try{SYS.mon=await BRIDGE.call('monitors');}catch(e){SYS.mon=null;}
+  if(!SYS.monSel||(SYS.monSel!=='all'&&!(SYS.mon&&SYS.mon.monitors.some(m=>m.key===SYS.monSel))))SYS.monSel='all';
+  if(state.view==='system')renderSystem();}
+async function setMonitorWallpaper(key,rel,crop,quiet){const m=SYS.mon.monitors.find(m=>m.key===key);if(!m)return;
+  m.entry=rel?{file:rel,crop:crop||null,uri:wpUri(rel)}:null;
+  if(!quiet)termAdd(rel?`$ rice.py monitor-wallpaper ${m.name} ${rel}${crop?' '+crop.map(v=>v.toFixed(3)).join(' '):''}`:`$ rice.py monitor-wallpaper ${m.name} -`,'c');
+  if(BRIDGE){try{await BRIDGE.call('setMonitorWallpaper',{key,rel:rel||null,crop:crop||null});}catch(e){termAdd('✗ '+e.message,'err');}}}
+let cropTimer=null;
+function bindCrop(){const box=$('#cropBox'),img=$('#cropImg'),rect=$('#cropRect');if(!box||!img)return;
+  const m=SYS.mon.monitors.find(m=>m.key===SYS.monSel),e=m.entry,monA=m.w/m.h;let imgA=1.6,z=1,c=null;
+  const draw=()=>{const [x,y,w,h]=c;Object.assign(rect.style,{left:x*100+'%',top:y*100+'%',width:w*100+'%',height:h*100+'%'});
+    $('#cropZoom').value=Math.round(z*100);$('#cropZv').textContent=Math.round(z*100)+'%';
+    $('#cropInfo').textContent=img.naturalWidth?`кадр ${Math.round(c[2]*img.naturalWidth)}×${Math.round(c[3]*img.naturalHeight)} пикс. → ${m.w}×${m.h}`+(c[2]*img.naturalWidth<m.w*0.98?' · картинка будет растянута':''):'';
+    const b=document.querySelector(`.mon[data-mon="${CSS.escape(m.key)}"]`);if(b)b.setAttribute('style',b.getAttribute('style').replace(/background-image[^]*$/,'')+bgStyle(img.src,c));};
+  const commit=()=>{e.crop=c.slice();clearTimeout(cropTimer);cropTimer=setTimeout(()=>setMonitorWallpaper(m.key,e.file,c,true),450);};
+  const clamp=()=>{c[0]=Math.min(Math.max(c[0],0),1-c[2]);c[1]=Math.min(Math.max(c[1],0),1-c[3]);};
+  const setZoom=(nz,cx,cy)=>{z=Math.min(Math.max(nz,1),4);cx=cx??c[0]+c[2]/2;cy=cy??c[1]+c[3]/2;const f=fullCrop(imgA,monA,z);c=[cx-f[2]/2,cy-f[3]/2,f[2],f[3]];clamp();draw();};
+  const init=()=>{imgA=img.naturalWidth/img.naturalHeight;const f=fullCrop(imgA,monA);
+    if(e.crop){c=e.crop.slice();z=Math.max(1,f[2]/c[2]);c[3]=c[2]*monA/imgA;clamp();}else c=f;draw();};
+  if(img.complete&&img.naturalWidth)init();else img.onload=init;
+  rect.onpointerdown=ev=>{ev.preventDefault();rect.setPointerCapture(ev.pointerId);const r=box.getBoundingClientRect(),sx=ev.clientX,sy=ev.clientY,c0=c.slice();
+    rect.onpointermove=mv=>{c[0]=c0[0]+(mv.clientX-sx)/r.width;c[1]=c0[1]+(mv.clientY-sy)/r.height;clamp();draw();};
+    rect.onpointerup=()=>{rect.onpointermove=null;commit();};};
+  box.onwheel=ev=>{ev.preventDefault();const r=box.getBoundingClientRect();setZoom(z*(ev.deltaY<0?1.1:1/1.1),(ev.clientX-r.left)/r.width,(ev.clientY-r.top)/r.height);commit();};
+  $('#cropZoom').oninput=ev=>{setZoom(ev.target.value/100);};$('#cropZoom').onchange=commit;
+  $('#cropFill').onclick=()=>{z=1;c=fullCrop(imgA,monA);draw();commit();};
+  $('#cropCenter').onclick=()=>{c[0]=(1-c[2])/2;c[1]=(1-c[3])/2;draw();commit();};
+  $('#monReset').onclick=async()=>{await setMonitorWallpaper(m.key,null);renderSystem();};}
 function renderSystemZoom(){const el=$('#zoomSeg');if(!el)return;
   el.innerHTML=ZOOMS.map(z=>`<button class="${z===zoom?'on':''}" data-z="${z}">${z}%</button>`).join('')+`<input type="range" min="60" max="200" step="5" value="${zoom}" id="zoomR"><span class="zv">${zoom}%</span>`;
   el.querySelectorAll('[data-z]').forEach(b=>b.onclick=()=>applyZoom(+b.dataset.z));

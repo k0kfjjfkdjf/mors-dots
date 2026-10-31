@@ -8,6 +8,9 @@
     rice.py next|prev|random  — следующие / предыдущие / случайные обои в текущей теме
     rice.py wallpapers [тема] — какие обои нашлись у темы (и где её папка)
     rice.py set-wallpaper <файл> — поставить конкретные обои текущей темы
+    rice.py monitors          — мониторы и какие обои на каждом
+    rice.py monitor-wallpaper <монитор> <файл> [x y w h] — свои обои на один монитор
+                              (x y w h — кадр в долях картинки 0…1; «-» вместо файла — как у всех)
 
 Обои: у каждой темы своя папка wallpapers/<тема>/ — всё, что там лежит (png, jpg, webp,
 gif…, в том числе в подпапках), подхватывается само; прописывать пути не нужно.
@@ -181,6 +184,100 @@ def selected_wallpaper(theme, files):
                 return f
         v = 0
     return files[int(v) % len(files)]
+
+
+# ---------------------------------------------------------------- обои по мониторам
+MON_STATE = RICE_DIR / "monitor-wallpapers.json"          # машинное (у каждого компьютера свои), не в git
+MON_CACHE = Path(os.environ.get("XDG_CACHE_HOME", Path.home() / ".cache")) / "rice/monitors"
+
+
+def monitors():
+    """Подключённые мониторы: имя выхода, EDID-описание (ключ — не зависит от разъёма),
+    разрешение в пикселях с учётом поворота, положение. RICE_MONITORS — JSON для тестов."""
+    raw = os.environ.get("RICE_MONITORS")
+    if raw is None:
+        if not shutil.which("hyprctl"):
+            return []
+        try:
+            raw = subprocess.run(["hyprctl", "monitors", "-j"], capture_output=True, text=True, timeout=5).stdout
+        except Exception:
+            return []
+    try:
+        data = json.loads(raw)
+    except Exception:
+        return []
+    out = []
+    for m in data:
+        w, h = int(m.get("width", 0)), int(m.get("height", 0))
+        if int(m.get("transform", 0)) % 2:                  # повёрнут на 90/270°
+            w, h = h, w
+        scale = float(m.get("scale", 1) or 1)
+        desc = (m.get("description") or "").strip()
+        out.append({"name": m.get("name", ""), "key": desc or m.get("name", ""), "desc": desc,
+                    "w": w, "h": h, "x": int(m.get("x", 0)), "y": int(m.get("y", 0)), "scale": scale})
+    return out
+
+
+def find_monitor(query, mons=None):
+    mons = mons if mons is not None else monitors()
+    q = query.lower().removeprefix("desc:")
+    return next((m for m in mons if q in (m["name"].lower(), m["key"].lower())), None) \
+        or next((m for m in mons if q in m["key"].lower()), None)
+
+
+def mon_state():
+    try:
+        return json.loads(MON_STATE.read_text())
+    except Exception:
+        return {}
+
+
+def set_monitor_wallpaper(theme, key, rel=None, crop=None):
+    """rel=None — монитор снова «как у всех». crop — [x, y, w, h] в долях картинки."""
+    d = mon_state()
+    per = d.setdefault(theme, {})
+    if rel is None:
+        per.pop(key, None)
+    else:
+        if crop is not None:
+            x, y, w, h = (min(max(float(v), 0.0), 1.0) for v in crop)
+            crop = [round(x, 5), round(y, 5), round(max(w, 0.01), 5), round(max(h, 0.01), 5)]
+        per[key] = {"file": rel, "crop": crop}
+    if not per:
+        d.pop(theme, None)
+    write(MON_STATE, json.dumps(d, ensure_ascii=False, indent=2))
+
+
+def render_for_monitor(theme, mon, entry):
+    """Картинка для монитора: вырезает кадр и масштабирует ровно под его пиксели.
+    Без кадра, для gif или без GdkPixbuf — исходный файл (awww сам обрежет по центру)."""
+    src = WP_DIR / theme / entry["file"]
+    if not src.is_file():
+        return None
+    crop = entry.get("crop")
+    if not crop or src.suffix.lower() == ".gif" or not (mon["w"] and mon["h"]):
+        return src
+    out = MON_CACHE / theme / ("".join(c if c.isalnum() else "_" for c in mon["key"])[:80] + ".png")
+    sig = f"{src}|{src.stat().st_mtime_ns}|{crop}|{mon['w']}x{mon['h']}"
+    sigf = out.with_suffix(".sig")
+    if out.exists() and sigf.exists() and sigf.read_text() == sig:
+        return out
+    try:
+        import gi
+        gi.require_version("GdkPixbuf", "2.0")
+        from gi.repository import GdkPixbuf
+        pb = GdkPixbuf.Pixbuf.new_from_file(str(src))
+        W, H = pb.get_width(), pb.get_height()
+        x, y = int(crop[0] * W), int(crop[1] * H)
+        w, h = max(1, min(int(crop[2] * W), W - x)), max(1, min(int(crop[3] * H), H - y))
+        sub = pb.new_subpixbuf(x, y, w, h).scale_simple(mon["w"], mon["h"], GdkPixbuf.InterpType.HYPER)
+        out.parent.mkdir(parents=True, exist_ok=True)
+        sub.savev(str(out), "png", [], [])
+        sigf.write_text(sig)
+        return out
+    except Exception as e:
+        print(f"  ! не вырезал кадр для {mon['name']}: {e} — ставлю картинку целиком", file=sys.stderr)
+        return src
 
 
 def select_wallpaper(theme, f):
@@ -548,11 +645,22 @@ def apply_wallpaper(t, transition="fade"):
             r = run(tool, "query")
             if r and r.returncode == 0:
                 break
-    if transition == "none":
-        run(tool, "img", str(t.wallpaper), "--transition-type", "none")
-    else:
-        run(tool, "img", str(t.wallpaper), "--transition-type", "fade",
-            "--transition-duration", "0.6", "--transition-fps", "60")
+    trans = (["--transition-type", "none"] if transition == "none" else
+             ["--transition-type", "fade", "--transition-duration", "0.6", "--transition-fps", "60"])
+    per = mon_state().get(t.id, {})
+    mons = monitors() if per else []
+    if not mons:
+        run(tool, "img", str(t.wallpaper), *trans)
+        return
+    rest = []
+    for m in mons:                                   # свои обои — на свой монитор, остальным — общие
+        img = render_for_monitor(t.id, m, per[m["key"]]) if m["key"] in per else None
+        if img:
+            run(tool, "img", "-o", m["name"], str(img), *trans)
+        else:
+            rest.append(m["name"])
+    if rest:
+        run(tool, "img", "-o", ",".join(rest), str(t.wallpaper), *trans)
 
 
 # ---------------------------------------------------------------- SDDM (экран входа)
@@ -675,8 +783,32 @@ def main(argv):
         apply_sddm(t)
         print(f"{t.raw['name']}: {f.name}")
     elif cmd == "wallpaper":
-        if current():
-            apply_wallpaper(Theme(current()), transition="none")  # при входе — без анимации
+        if current():   # при входе — без анимации; «rice.py wallpaper fade» — с ней
+            apply_wallpaper(Theme(current()), transition="fade" if "fade" in argv[2:] else "none")
+    elif cmd == "monitors":
+        name = current()
+        per = mon_state().get(name, {}) if name else {}
+        for m in monitors():
+            e = per.get(m["key"])
+            print(f"{m['name']:10} {m['w']}x{m['h']}  {m['key']}\n           обои: "
+                  + (f"{e['file']}" + (f" (кадр {e['crop']})" if e.get('crop') else "") if e else "как у всех"))
+    elif cmd == "monitor-wallpaper" and len(argv) > 3:
+        name = current()
+        m = find_monitor(argv[2])
+        if not name or not m:
+            print(f"Нет монитора «{argv[2]}» — смотри rice.py monitors")
+            return 1
+        if argv[3] == "-":
+            set_monitor_wallpaper(name, m["key"])
+        else:
+            t = Theme(name)
+            f = next((f for f in t.wallpapers if argv[3] in (str(f), f.name, str(f.relative_to(WP_DIR / name)))), None)
+            if not f:
+                print(f"Нет такой картинки у темы {name}: {argv[3]}")
+                return 1
+            crop = [float(v) for v in argv[4:8]] if len(argv) >= 8 else None
+            set_monitor_wallpaper(name, m["key"], str(f.relative_to(WP_DIR / name)), crop)
+        apply_wallpaper(Theme(name))
     else:
         print(__doc__)
         return 1
