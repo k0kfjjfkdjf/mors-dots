@@ -21,6 +21,39 @@ DOTS = HERE.parent.parent                                   # корень mors-
 RICE = DOTS / 'rice'
 UI = HERE.parent / 'prototype/configurator.html'
 HOME = pathlib.Path.home()
+
+
+def jsonc_error(text):
+    """None, если текст — верный JSON с комментариями // /* */ и висячими запятыми (как читает fastfetch),
+    иначе «строка N, символ M: …»."""
+    import re
+    out, i, n, q = [], 0, len(text), False
+    while i < n:
+        c = text[i]
+        if q:
+            out.append(c)
+            if c == '\\' and i + 1 < n:
+                out.append(text[i + 1]); i += 2; continue
+            if c == '"':
+                q = False
+        elif c == '"':
+            q = True; out.append(c)
+        elif text.startswith('//', i):
+            while i < n and text[i] != '\n':
+                out.append(' '); i += 1
+            continue
+        elif text.startswith('/*', i):
+            j = text.find('*/', i + 2); j = n if j < 0 else j + 2
+            out.append(re.sub(r'[^\n]', ' ', text[i:j])); i = j; continue
+        else:
+            out.append(c)
+        i += 1
+    clean = re.sub(r',(\s*[}\]])', r' \1', ''.join(out))
+    try:
+        json.loads(clean)
+        return None
+    except json.JSONDecodeError as e:
+        return f'строка {e.lineno}, символ {e.colno}: {e.msg}'
 HP_CONFIG = HOME / '.config/hyprpanel/config.json'
 STATE_DIR = pathlib.Path(os.environ.get('XDG_CONFIG_HOME', HOME / '.config')) / 'mors-settings'
 CACHE_DIR = pathlib.Path(os.environ.get('XDG_CACHE_HOME', HOME / '.cache')) / 'mors-settings'
@@ -371,6 +404,11 @@ class Backend:
         if not self._allowed(p):
             raise PermissionError(f'запись вне ~/.config и mors-dots запрещена: {path}')
         real = p.resolve()
+        cfg = next((c for c in self.BUILTIN + self._user_configs() if c['id'] == id), {})
+        if cfg.get('format') == 'jsonc' or real.suffix in ('.json', '.jsonc'):
+            err = jsonc_error(text)                     # битый JSON не пишем — программа (fastfetch) не запустится
+            if err:
+                raise ValueError(f'не сохранил {path}: получился неверный JSON ({err}). Файл на диске не тронут')
         backup = None
         if real.exists() and real not in self.hypr_backed:
             bdir = CACHE_DIR / 'backups' / f'{datetime.datetime.now():%Y%m%d-%H%M%S}'
@@ -382,7 +420,6 @@ class Backend:
         tmp = real.with_name(real.name + '.mors-tmp')
         tmp.write_text(text)
         os.replace(tmp, real)
-        cfg = next((c for c in self.BUILTIN + self._user_configs() if c['id'] == id), {})
         do_reload, reload = reload, None
         if do_reload and cfg.get('reload'):
             import shlex

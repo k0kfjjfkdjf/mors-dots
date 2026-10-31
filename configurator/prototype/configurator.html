@@ -760,6 +760,7 @@ function parseMarkup(cfg,d){
     if(pending&&(m=raw.match(fmt.re))){
       let val=m[4],quoted=false;
       if(J&&/^".*"$/.test(val)){quoted='json';try{val=JSON.parse(val);}catch(e){val=val.slice(1,-1);}}
+      else if(J&&!/^(-?\d+(\.\d+)?([eE][+-]?\d+)?|true|false|null)$/.test(val.trim()))quoted='json';   // строка без кавычек — при правке кавычки вернутся
       else if(/^".*"$/.test(val)||/^'.*'$/.test(val)){quoted=val[0];val=val.slice(1,-1);}
       const key=J?m[2].trim().slice(1,-1):m[2].trim();
       items.push({line:i,meta:pending,pre:m[1],keyRaw:m[2],sep:m[3],post:m[5],value:val,quoted,section,key,path:[...stack.filter(Boolean),key].join(cfg.format==='lua'||J?'.':':')});
