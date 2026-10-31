@@ -144,6 +144,31 @@ input[type=color]{width:34px;height:28px;border:1px solid var(--border);border-r
 .sysbtn small{display:block;font-weight:400;color:var(--muted);font-size:11px}
 .sysview{flex:1;overflow:auto;padding:20px;min-height:0}
 .sysview[hidden],.content[hidden]{display:none!important}
+/* страница «Форматы» */
+.fmtpage{display:grid;grid-template-columns:230px minmax(0,1fr);gap:16px;align-items:start}
+.fmtlist{display:flex;flex-direction:column;gap:4px;position:sticky;top:0}
+.fmtlist .navlabel{margin:10px 4px 4px}
+.fmtlist button.fi{display:flex;flex-direction:column;align-items:flex-start;gap:1px;text-align:left;background:none;border:1px solid transparent;border-radius:8px;padding:7px 10px;cursor:pointer;color:var(--text)}
+.fmtlist button.fi:hover{background:var(--panel2)}
+.fmtlist button.fi.active{background:var(--panel2);border-color:var(--border)}
+.fmtlist button.fi small{color:var(--muted);font-family:var(--mono);font-size:11px}
+.fmted .grid2{display:grid;grid-template-columns:1fr 1fr;gap:0 14px}
+.fmted .field input[type=text],.fmted textarea{font-family:var(--mono);font-size:12.5px}
+.fmted textarea{background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:8px 10px;outline:none;resize:vertical;width:100%;line-height:1.5;tab-size:4}
+.fmted textarea:focus{border-color:var(--accent)}
+.fmted .field input:disabled,.fmted textarea:disabled,.fmted select:disabled{opacity:.75}
+.fmted .hint{font-size:11.5px;color:var(--muted);line-height:1.45}
+.fmted .ferr{font-size:11.5px;color:var(--danger);font-family:var(--mono)}
+.fmted details{margin:4px 0 12px}.fmted summary{cursor:pointer;color:var(--accent);font-size:13px;margin-bottom:8px}
+.fmtbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-top:6px}
+.fmttest{width:100%;border-collapse:collapse;font-size:12px;margin-top:8px}
+.fmttest td{padding:3px 8px;border-bottom:1px solid var(--line);vertical-align:top}
+.fmttest td.n{color:var(--dim);text-align:right;font-family:var(--mono);width:28px}
+.fmttest td.l{font-family:var(--mono);white-space:pre;max-width:0;overflow:hidden;text-overflow:ellipsis;width:46%}
+.fmttest td.r{color:var(--muted)}
+.fmttest .k{color:var(--key)}.fmttest .v{color:var(--val)}.fmttest .a{color:var(--ann)}.fmttest .w{color:var(--danger)}.fmttest .o{color:var(--accent2)}
+.fmtsum{font-size:12px;color:var(--muted);margin-top:6px}
+@media (max-width:1100px){.fmtpage{grid-template-columns:1fr}.fmtlist{position:static}.fmted .grid2{grid-template-columns:1fr}}
 .syswrap{max-width:980px;margin:0 auto;display:flex;flex-direction:column;gap:16px}
 .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:16px 18px}
 .card h2{margin:0 0 4px;font-size:15px}
@@ -405,6 +430,7 @@ input::placeholder,textarea::placeholder{color:var(--dim)}
   <aside>
     <div class="brand"><div class="logo">#@</div><div><b>Конфигуратор</b><small id="brandSub">прототип интерфейса</small></div></div>
     <button class="sysbtn" id="sysBtn"><span class="ic">⚙</span><span>Система<small>тема · масштаб · обновление</small></span></button>
+    <button class="sysbtn" id="fmtBtn"><span class="ic">{ }</span><span>Форматы<small>как читать конфиги · свои правила</small></span></button>
     <div class="navlabel">Конфиги</div>
     <div id="cfglist"></div>
     <button class="cfg addbtn" id="addCfg">＋ Добавить конфиг</button>
@@ -423,6 +449,7 @@ input::placeholder,textarea::placeholder{color:var(--dim)}
       <button class="btn primary" id="saveBtn">Сохранить</button>
     </div>
     <div class="sysview" id="sysview" hidden></div>
+    <div class="sysview" id="fmtview" hidden></div>
     <div class="content" id="content">
       <div class="form" id="form">
         <input class="search" id="search" placeholder="Поиск по всем файлам конфига…  ( / )">
@@ -517,27 +544,73 @@ const $=s=>document.querySelector(s), $$=s=>[...document.querySelectorAll(s)];
 const esc=s=>String(s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const base=p=>String(p).split('/').pop();
 
-const FORMATS={
-  conf:{label:'ключ = значение (Hyprland, .conf)',comment:'#',sep:' = ',tail:'',src:/^\s*source\s*=\s*(.+?)\s*$/,re:/^(\s*)([^\s=#{}][^=]*?)(\s*=\s*)(.*?)(\s*)$/},
-  space:{label:'ключ значение (kitty, i3)',comment:'#',sep:' ',tail:'',src:/^\s*include\s+(.+?)\s*$/,re:/^(\s*)([^\s#]+)(\s+)(.*?)(\s*)$/},
-  ini:{label:'INI / TOML (foot, mako)',comment:'#',sep:' = ',tail:'',src:/^\s*include\s*=\s*(.+?)\s*$/,re:/^(\s*)([^\s=#;\[][^=]*?)(\s*=\s*)(.*?)(\s*)$/},
-  lua:{label:'Lua (hyprland.lua, nvim)',comment:'--',sep:' = ',tail:',',src:/^\s*(?:dofile|require)\s*\(?\s*["'](.+?)["']\s*\)?\s*$/,re:/^(\s*)([\w.]+)(\s*=\s*)("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^"',\s][^,]*?)(\s*,?\s*(?:--.*)?)$/},
-  jsonc:{label:'JSON / JSONC (fastfetch, waybar)',comment:'//',sep:': ',tail:',',src:/^(?!)$/,re:/^(\s*)("(?:\\.|[^"\\])*")(\s*:\s*)("(?:\\.|[^"\\])*"|[^",\s{\[][^,]*?)(\s*,?\s*(?:\/\/.*)?)$/}
+/* ---------- форматы конфигов ----------
+   Формат — описание, а не код: так же устроены и встроенные, и свои (страница «Форматы»).
+   re      — строка «ключ-значение»: 5 групп = отступ, ключ, разделитель, значение, хвост; вместе — вся строка
+   hook    — вместо re: тело JS-функции (line) → [отступ, ключ, разделитель, значение, хвост] | null
+   quote   — none | auto ("…" и '…' снимаются и возвращаются) | json (JSON-строки с экранированием)
+   nest    — none | lines (open/close — строки входа и выхода из блока) | header ([секция] до следующей) | brackets ({ } [ ] по символам)
+   join    — чем склеивать путь ключа: general:gaps_in, logo.type
+   src     — строка подключения другого файла (группа 1 — путь), srcTpl — как её писать: include {path}
+   check   — проверка перед записью: json | команда с {file} (ненулевой код = не писать) | пусто */
+const FMT_BUILTIN={
+  conf:{label:'ключ = значение (Hyprland, .conf)',comment:'#',sep:' = ',tail:'',re:/^(\s*)([^\s=#{}][^=]*?)(\s*=\s*)(.*?)(\s*)$/,quote:'auto',
+    nest:'lines',open:/^([\w.:\-]+)\s*(=\s*)?\{\s*$/,close:/^\}\s*\)?\s*,?$/,join:':',src:/^\s*source\s*=\s*(.+?)\s*$/,srcTpl:'source = {path}',check:'',
+    sample:'# Hyprland\nsource = ./colors.conf\ngeneral {\n    gaps_in = 5\n    col.active_border = rgba(f5a9c8ff)\n}\n$mainMod = SUPER'},
+  space:{label:'ключ значение (kitty, i3)',comment:'#',sep:' ',tail:'',re:/^(\s*)([^\s#]+)(\s+)(.*?)(\s*)$/,quote:'auto',
+    nest:'none',join:':',src:/^\s*include\s+(.+?)\s*$/,srcTpl:'include {path}',check:'',
+    sample:'# kitty\ninclude theme.conf\nfont_family JetBrains Mono\nfont_size 11.5\nbackground_opacity 0.9'},
+  ini:{label:'INI / TOML (foot, mako)',comment:'#',sep:' = ',tail:'',re:/^(\s*)([^\s=#;\[][^=]*?)(\s*=\s*)(.*?)(\s*)$/,quote:'auto',
+    nest:'header',open:/^\[\s*([^\]]+?)\s*\]\s*$/,join:':',src:/^\s*include\s*=\s*(.+?)\s*$/,srcTpl:'include = {path}',check:'',
+    sample:'# foot.ini\nfont=JetBrains Mono:size=11\n\n[colors]\nalpha=0.9\nbackground=1e1e2e'},
+  lua:{label:'Lua (hyprland.lua, nvim)',comment:'--',sep:' = ',tail:',',re:/^(\s*)([\w.]+)(\s*=\s*)("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^"',\s][^,]*?)(\s*,?\s*(?:--.*)?)$/,quote:'auto',
+    nest:'lines',open:/^([\w.:\-]+)\s*(=\s*)?\{\s*$/,close:/^\}\s*\)?\s*,?$/,join:'.',src:/^\s*(?:dofile|require)\s*\(?\s*["'](.+?)["']\s*\)?\s*$/,srcTpl:'',check:'',
+    sample:'require("lua.theme")\nhl.config({\n  general = {\n    gaps_in = 5,\n    layout = "dwindle",   -- или master\n  },\n})'},
+  jsonc:{label:'JSON / JSONC (fastfetch, waybar)',comment:'//',sep:': ',tail:',',re:/^(\s*)("(?:\\.|[^"\\])*")(\s*:\s*)("(?:\\.|[^"\\])*"|[^",\s{\[][^,]*?)(\s*,?\s*(?:\/\/.*)?)$/,quote:'json',
+    nest:'brackets',join:'.',src:'',srcTpl:'',check:'json',
+    sample:'{\n  "logo": {\n    "type": "auto",   // или kitty\n    "height": 15\n  },\n  "modules": ["break"]\n}'}
 };
-/* JSON(C): скобки строки по порядку (без строк в кавычках и хвостового //-комментария) */
-function jsonBraces(line){const out=[];let q=false;
+let USER_FORMATS={};
+const FORMATS={};
+const reSrc=v=>v instanceof RegExp?v.source:String(v||'');
+function compileFormat(id,f,builtin){
+  const o={...f,id,builtin:!!builtin,errs:{}};
+  const rx=k=>{const v=f[k];if(!v)return null;if(v instanceof RegExp)return v;try{return new RegExp(v);}catch(e){o.errs[k]=e.message;return null;}};
+  o.re=rx('re');o.src=rx('src')||/^(?!)$/;o.openRe=rx('open');o.closeRe=rx('close');
+  if(f.hook&&String(f.hook).trim()){try{o.hookFn=new Function('line',f.hook);}catch(e){o.errs.hook=e.message;}}
+  else if(o.re){const n=new RegExp(o.re.source+'|').exec('').length-1;if(n<5)o.errs.re=`нужно 5 групп в скобках — отступ, ключ, разделитель, значение, хвост; сейчас ${n}`;}
+  else if(!o.errs.re)o.errs.re='нет правила строки';
+  o.nest=f.nest||'none';o.join=f.join??':';o.quote=f.quote||'auto';o.sep=f.sep??' = ';o.tail=f.tail??'';o.comment=f.comment||'#';o.label=f.label||id;
+  return o;}
+function buildFormats(){Object.keys(FORMATS).forEach(k=>delete FORMATS[k]);
+  for(const[k,f]of Object.entries(FMT_BUILTIN))FORMATS[k]=compileFormat(k,f,true);
+  for(const[k,f]of Object.entries(USER_FORMATS))if(!FMT_BUILTIN[k])FORMATS[k]=compileFormat(k,f,false);}
+buildFormats();
+/* строка → [вся, отступ, ключ, разделитель, значение, хвост] или null.
+   Части обязаны склеиваться ровно в строку — иначе при записи что-то потерялось бы, и такую строку не трогаем */
+function matchLine(fmt,raw){let r;
+  if(fmt.hookFn){try{r=fmt.hookFn(raw);}catch(e){return null;}
+    if(!r)return null;if(!Array.isArray(r))r=[r.indent,r.key,r.sep,r.value,r.tail];r=[raw,...r.slice(0,5)];}
+  else{if(!fmt.re)return null;r=raw.match(fmt.re);if(!r)return null;r=[...r];}
+  for(let k=1;k<=5;k++)r[k]=String(r[k]??'');
+  return r.slice(1,6).join('')===raw&&r[2].trim()?r:null;}
+/* скобки строки по порядку — без строк в кавычках и хвостового комментария */
+function jsonBraces(line,cm='//'){const out=[];let q=false;
   for(let i=0;i<line.length;i++){const c=line[i];
     if(q){if(c==='\\')i++;else if(c==='"')q=false;continue;}
-    if(c==='"')q=true;else if(c==='/'&&line[i+1]==='/')break;else if('{['.includes(c)||'}]'.includes(c))out.push(c);}
+    if(c==='"')q=true;else if(cm&&line.startsWith(cm,i))break;else if('{['.includes(c)||'}]'.includes(c))out.push(c);}
   return out;}
-const uncomment=l=>l.replace(/^(\s*)\/\/ ?/,'$1');
+const reEsc=s=>String(s).replace(/[.*+?^${}()|[\]\\]/g,'\\$&');
+const uncomment=(l,cm='//')=>l.replace(new RegExp('^(\\s*)'+reEsc(cm)+' ?'),'$1');
 /* type: block — блок {...} под строкой разметки; выключен = все его строки закомментированы */
-function blockRange(lines,i){const off=/^\s*\/\//.test(lines[i]);let depth=0,seen=false;
-  for(let j=i;j<lines.length;j++){const l=off?uncomment(lines[j]):lines[j];
-    for(const c of jsonBraces(l)){if('{['.includes(c)){depth++;seen=true;}else depth--;}
+function blockRange(lines,i,cm='//'){const off=lines[i].trim().startsWith(cm);let depth=0,seen=false;
+  for(let j=i;j<lines.length;j++){const l=off?uncomment(lines[j],cm):lines[j];
+    for(const c of jsonBraces(l,cm)){if('{['.includes(c)){depth++;seen=true;}else depth--;}
     if(seen&&depth<=0)return {end:j,off};}
   return null;}
-const SRC_TPL={conf:p=>`source = ${p}`,space:p=>`include ${p}`,ini:p=>`include = ${p}`,jsonc:()=>'// в JSON нет подключения файлов — добавь файл в список вручную',lua:p=>`require("${luaModule(p)}")`};
+function srcLine(fk,p){const f=FORMATS[fk]||FORMATS.conf;
+  if(fk==='lua')return `require("${luaModule(p)}")`;
+  return f.srcTpl?f.srcTpl.replace('{path}',p):`${f.comment} у формата «${f.label}» нет строки подключения — файл добавится только в список`;}
 const luaModule=p=>String(p).replace(/^.*?\/hypr\//,'').replace(/\.lua$/,'').replace(/\//g,'.');
 
 /* ---------- демо-данные: Hyprland из нескольких файлов ---------- */
@@ -723,11 +796,11 @@ function parseMarkup(cfg,d){
   const info=lines.map(()=>({kind:'plain'})),items=[],stack=[];
   let section='Без раздела',pending=null,title=null,active=cfg.start.mode==='all';
   const B=(cfg.start.begin||'').trim(),E=(cfg.start.end||'').trim();
-  const J=cfg.format==='jsonc';
+  const N=fmt.nest,J=N==='brackets',Q=fmt.quote,X=!!cfg.explain,CM=cfg.comment;
   for(let i=0;i<lines.length;i++){
     const raw=lines[i],t=raw.trim();let m;
     if(pending&&(pending.type||'').toLowerCase()==='block'&&t&&!t.startsWith(tag)){
-      const r=blockRange(lines,i);
+      const r=blockRange(lines,i,CM);
       if(r){items.push({line:i,end:r.end,block:true,meta:pending,value:r.off?'false':'true',section,key:pending.name,path:pending.name});
         info[i]={kind:'val',item:items.length-1};}
       pending=null;
@@ -739,14 +812,16 @@ function parseMarkup(cfg,d){
       if(B&&t===B){active=true;info[i]={kind:'marker'};continue;}
       if(cfg.start.mode==='between'&&E&&t===E){active=false;info[i]={kind:'marker'};pending=null;continue;}
     }
-    if(J&&!t.startsWith('//')){
-      const br=jsonBraces(raw);
-      if(br.length){const k=(raw.match(/^\s*"((?:\\.|[^"\\])*)"\s*:/)||[])[1];let first=true;
-        br.forEach(c=>{if('{['.includes(c)){stack.push(first&&k?k:'');first=false;}else stack.pop();});
-        if(!/:\s*("|[^\s{\[])/.test(raw)||info[i].kind==='val'){if(!active&&info[i].kind!=='val')info[i]={kind:'out'};continue;}}
+    if(J&&!t.startsWith(CM)){
+      const br=jsonBraces(raw,CM);
+      if(br.length){const k=fmt.openRe?((t.match(fmt.openRe)||[])[1]):(raw.match(/^\s*"((?:\\.|[^"\\])*)"\s*:/)||[])[1];let first=true,opened=[],closed=0;
+        br.forEach(c=>{if('{['.includes(c)){const nm=first&&k?k:'';stack.push(nm);opened.push(nm);first=false;}else{stack.pop();closed++;}});
+        if(!matchLine(fmt,raw)||info[i].kind==='val'){
+          if(info[i].kind!=='val')info[i]=!active?{kind:'out'}:X?(opened.length>closed?{kind:'open',name:opened.filter(Boolean).join('.')}:{kind:'close'}):info[i];continue;}}
     }
-    if(!J&&cfg.format!=='space'&&(m=t.match(/^([\w.:\-]+)\s*(=\s*)?\{\s*$/))){stack.push(m[1]);if(!active)info[i]={kind:'out'};continue;}
-    if(!J&&/^\}\s*\)?\s*,?$/.test(t)){stack.pop();if(!active)info[i]={kind:'out'};continue;}
+    if((N==='lines'||N==='header')&&fmt.openRe&&(m=t.match(fmt.openRe))){if(N==='header')stack.length=0;stack.push(m[1]||'');
+      info[i]=!active?{kind:'out'}:X?{kind:'open',name:m[1]||''}:info[i];continue;}
+    if(N==='lines'&&fmt.closeRe&&fmt.closeRe.test(t)){stack.pop();info[i]=!active?{kind:'out'}:X?{kind:'close'}:info[i];continue;}
     if(!active){info[i]={kind:'out'};continue;}
     if(t.startsWith(tag)){
       const body=t.slice(tag.length).trim();info[i]={kind:'ann'};
@@ -757,13 +832,14 @@ function parseMarkup(cfg,d){
     }
     if(t.startsWith(cfg.comment)){info[i]={kind:'cmt'};continue;}
     if(!t)continue;
-    if(pending&&(m=raw.match(fmt.re))){
+    if(!pending&&X&&(m=matchLine(fmt,raw)))pending={name:'',type:'string'};
+    if(pending&&(m=matchLine(fmt,raw))){
       let val=m[4],quoted=false;
-      if(J&&/^".*"$/.test(val)){quoted='json';try{val=JSON.parse(val);}catch(e){val=val.slice(1,-1);}}
-      else if(J&&!/^(-?\d+(\.\d+)?([eE][+-]?\d+)?|true|false|null)$/.test(val.trim()))quoted='json';   // строка без кавычек — при правке кавычки вернутся
-      else if(/^".*"$/.test(val)||/^'.*'$/.test(val)){quoted=val[0];val=val.slice(1,-1);}
-      const key=J?m[2].trim().slice(1,-1):m[2].trim();
-      items.push({line:i,meta:pending,pre:m[1],keyRaw:m[2],sep:m[3],post:m[5],value:val,quoted,section,key,path:[...stack.filter(Boolean),key].join(cfg.format==='lua'||J?'.':':')});
+      if(Q==='json'&&/^".*"$/.test(val)){quoted='json';try{val=JSON.parse(val);}catch(e){val=val.slice(1,-1);}}
+      else if(Q==='json'&&!/^(-?\d+(\.\d+)?([eE][+-]?\d+)?|true|false|null)$/.test(val.trim()))quoted='json';   // строка без кавычек — при правке кавычки вернутся
+      else if(Q!=='none'&&(/^".*"$/.test(val)||/^'.*'$/.test(val))){quoted=val[0];val=val.slice(1,-1);}
+      const key=Q==='json'&&/^".*"$/.test(m[2].trim())?m[2].trim().slice(1,-1):m[2].trim();
+      items.push({line:i,meta:pending,pre:m[1],keyRaw:m[2],sep:m[3],post:m[5],value:val,quoted,section,key,path:[...stack.filter(Boolean),key].join(fmt.join)});
       info[i]={kind:'val',item:items.length-1};
     }
     pending=null;
@@ -835,9 +911,9 @@ function setValue(g,nv,opts={}){
   const it=state.parsed.items[g],d=cur.files[it.fi];pushHistory('v'+g,it.fi);
   if(cur.mode==='adapter'){const obj=JSON.parse(d.text);obj[it.key]=typeof nv==='string'?coerce(it.meta.type,nv):nv;d.text=JSON.stringify(obj,null,2);}
   else if(it.block){const lines=d.text.split('\n'),on=isTrue(nv);
-    const ind=lines[it.line].match(/^\s*/)[0];   // «// » ставится на отступ блока — как комментируют руками
+    const ind=lines[it.line].match(/^\s*/)[0],cm=cur.comment+' ';   // «// » ставится на отступ блока — как комментируют руками
     for(let j=it.line;j<=it.end;j++){if(!lines[j].trim())continue;
-      lines[j]=on?uncomment(lines[j]):lines[j].startsWith(ind)?ind+'// '+lines[j].slice(ind.length):lines[j].replace(/^(\s*)/,'$1// ');}
+      lines[j]=on?uncomment(lines[j],cur.comment):lines[j].startsWith(ind)?ind+cm+lines[j].slice(ind.length):lines[j].replace(/^(\s*)/,'$1'+cm);}
     d.text=lines.join('\n');}
   else{const lines=d.text.split('\n');const v=it.quoted==='json'?JSON.stringify(String(nv)):it.quoted?it.quoted+nv+it.quoted:nv;lines[it.line]=it.pre+it.keyRaw+it.sep+v+it.post;d.text=lines.join('\n');}
   state.parsed=parseCur();state.file=it.fi;
@@ -895,7 +971,7 @@ function renderLog(){const el=$('#log');let h='<div class="hd">Журнал пр
 /* ---------- отрисовка ---------- */
 function renderSidebar(){
   $('#cfglist').innerHTML=configs.map((c,i)=>{
-    let h=`<button class="cfg ${c===cur&&state.view!=='system'?'active':''} ${BRIDGE&&!c.hp&&!c.real?'democfg':''}" data-i="${i}" ${BRIDGE&&!c.hp&&!c.real?'title="Демо-данные: этот конфиг пока не подключён к настоящим файлам"':''}>
+    let h=`<button class="cfg ${c===cur&&state.view==='cfg'?'active':''} ${BRIDGE&&!c.hp&&!c.real?'democfg':''}" data-i="${i}" ${BRIDGE&&!c.hp&&!c.real?'title="Демо-данные: этот конфиг пока не подключён к настоящим файлам"':''}>
       <div class="meta"><div>${esc(c.name)}</div><div>${c.files.length>1?`${c.files.length} файлов · `:''}${esc(c.files[0].path)}</div></div>
       ${dirtyCfg(c)?'<span class="dot" title="Есть несохранённые изменения"></span>':''}
       <span class="badge ${c.mode==='adapter'?'adapter':''}">${c.mode==='adapter'?'адаптер':esc(c.comment+c.marker)}</span></button>`;
@@ -906,7 +982,7 @@ function renderSidebar(){
     }
     return h;}).join('');
   $$('#cfglist .cfg').forEach(b=>b.onclick=()=>selectConfig(configs[+b.dataset.i]));
-  $('#sysBtn').classList.toggle('active',state.view==='system');
+  $('#sysBtn').classList.toggle('active',state.view==='system');$('#fmtBtn').classList.toggle('active',state.view==='formats');
   $$('#cfglist .subfile[data-fi]').forEach(b=>b.onclick=()=>focusFile(+b.dataset.fi));
   const a=$('#sideAddFile');if(a)a.onclick=openFileModal;
 }
@@ -918,7 +994,8 @@ function focusFile(fi){
 }
 function renderTop(){
   $('#modeBadge').textContent=BRIDGE?'':'прототип в браузере';$('#brandSub').textContent=BRIDGE?'настройки райса':'прототип интерфейса';if(BRIDGE)document.title='Настройки';$('#modeBadge').style.display=BRIDGE?'none':'';
-  $$('#status,#liveWrap,#undoBtn,#revertBtn,#saveBtn').forEach(e=>e.style.display=state.view==='system'?'none':'');
+  $$('#status,#liveWrap,#undoBtn,#revertBtn,#saveBtn').forEach(e=>e.style.display=state.view!=='cfg'?'none':'');
+  if(state.view==='formats'){$('#tName').textContent='Форматы конфигов';$('#tPath').textContent='как программа читает строки · свои правила для нестандартных файлов';return;}
   if(state.view==='system'){$('#tName').textContent='Система';$('#tPath').textContent=BRIDGE?SYS.dots||'':'тема · масштаб · обновление райса';return;}
   $('#tName').textContent=cur.name;
   $('#tPath').textContent=cur.files.length>1?`${cur.files[0].path}  +${cur.files.length-1} подключённых`:cur.files[0].path;
@@ -1257,16 +1334,21 @@ gaps_in = 5</pre>
   <tr><td><code>string</code></td><td>поле ввода</td><td>—</td></tr></table>
   <h3>С чего начинать разбор</h3>
   <p><b>Весь файл</b> — по умолчанию. <b>После маркера</b>, например <code>${t}cfgui:start</code> — всё выше игнорируется. <b>Между маркерами</b> — редактор живёт только внутри блока. Правило действует в каждом файле конфига. Настраивается кнопкой ⚙.</p>
+  <h3>Свой формат</h3>
+  <p>Если конфиг не похож ни на один встроенный формат — страница <b>«Форматы»</b> слева. Там описывается, как читать строку (регулярное выражение из пяти групп или своя функция на JavaScript), кавычки, вложенность, подключение файлов и проверка перед записью. Таблица под примером сразу показывает, что программа поймёт в каждой строке. Встроенные форматы можно скопировать и поправить.</p>
   <h3>Адаптеры для чужих программ</h3>
   <p>Если у программы свой формат или свой редактор (как у HyprPanel), разметку в её файл не пишем. Описание лежит в отдельной схеме — ключ, русское название, тип, раздел. Так получается русская версия настроек без правки чужого кода.</p>
   <h3>Что редактор гарантирует</h3>
   <p>Меняется только значение в строке. Комментарии, отступы и строки без разметки остаются байт-в-байт. Сохраняются только изменённые файлы, перед записью каждого — резервная копия.</p></div>`;}
 function renderAll(flash){renderSidebar();renderTop();renderForm();renderTabs();renderChips();renderPane(flash);renderLog();}
-function selectConfig(c){if(state.capturing)stopCapture();if(state.view==='system')closeSystem();cur=c;state.file=0;state.filter='';$('#search').value='';state.log=[];state.parsed=parseCur();renderAll();$('#form').scrollTop=0;}
+function selectConfig(c){if(state.capturing)stopCapture();if(state.view!=='cfg')closeSystem();cur=c;state.file=0;state.filter='';$('#search').value='';state.log=[];state.parsed=parseCur();renderAll();$('#form').scrollTop=0;}
 
 /* ---------- модалка конфига ---------- */
 let modalEdit=false;
-$('#mFormat').innerHTML=Object.entries(FORMATS).map(([k,f])=>`<option value="${k}">${esc(f.label)}</option>`).join('');
+function fillFormatSelect(){const el=$('#mFormat'),v=el.value;
+  el.innerHTML=Object.entries(FORMATS).map(([k,f])=>`<option value="${k}">${esc(f.label)}${f.builtin?'':' · свой'}</option>`).join('')+'<option value="__new">＋ Свой формат…</option>';
+  if(v&&FORMATS[v])el.value=v;}
+fillFormatSelect();
 function openModal(edit){
   modalEdit=edit;const c=edit?cur:{name:'',files:[{path:'~/.config/'}],mode:'markup',format:'conf',comment:'#',marker:'@',follow:true,start:{mode:'all',begin:'',end:''}};
   $('#mTitle').textContent=edit?`Настройки разбора — ${cur.name}`:'Добавить конфиг';$('#mOk').textContent=edit?'Применить':'Добавить';
@@ -1292,13 +1374,15 @@ function updModal(){
   if(sm==='between')s+=`<span class="m">${esc($('#mBegin2').value)}</span>\n`;
   s+=`<span class="a">${esc(tag)}section Звук</span>\n<span class="a">${esc(tag)}name: Громкость | type: int | range: 0-100 | desc: Описание</span>\nvolume${esc(f.sep)}50${esc(f.tail)}\n<span class="a">${esc(tag)}end</span>`;
   if(sm==='between')s+=`\n<span class="m">${esc($('#mEnd').value)}</span>`;
-  if($('#mFollow').checked)s+=`\n\n<span class="s">${esc(SRC_TPL[fk]('./extra.conf'))}</span>   <span class="d">← станет отдельным разделом</span>`;
+  if($('#mFollow').checked)s+=`\n\n<span class="s">${esc(srcLine(fk,'./extra.conf'))}</span>   <span class="d">← станет отдельным разделом</span>`;
   pv.innerHTML=s;
 }
 $('#mPick').onclick=async()=>{const p=await pickPath('file',$('#mPath').value||'~/.config/');if(p){$('#mPath').value=p.replace(/^\/home\/[^/]+/,'~');
   if(!$('#mName').value.trim())$('#mName').value=p.split('/').slice(-2,-1)[0]||'';
   const ext=(p.match(/\.(\w+)$/)||[])[1];if(ext==='lua'){$('#mFormat').value='lua';$('#mFormat').dispatchEvent(new Event('change'));}else if(['ini','toml'].includes(ext)){$('#mFormat').value='ini';$('#mFormat').dispatchEvent(new Event('change'));}updModal();}};
-$('#mFormat').addEventListener('change',()=>{const old=$('#mComment').value,nc=FORMATS[$('#mFormat').value].comment;
+$('#mFormat').addEventListener('change',()=>{
+  if($('#mFormat').value==='__new'){closeModals();openFormats(null,true);return;}
+  const old=$('#mComment').value,nc=FORMATS[$('#mFormat').value].comment;
   ['#mBegin','#mBegin2','#mEnd'].forEach(id=>{const el=$(id);if(el.value.startsWith(old))el.value=nc+el.value.slice(old.length);});
   $('#mComment').value=nc;updModal();});
 ['#mMode','#mComment','#mMarker','#mBegin','#mBegin2','#mEnd','#mName','#mFollow'].forEach(id=>$(id).addEventListener('input',updModal));
@@ -1341,7 +1425,7 @@ function openFileModal(){
   $('#fFileTag').textContent=cur.comment+cur.marker+'file …';
   updFileModal();$('#fModalBg').classList.add('open');setTimeout(()=>{const p=$('#fPath');p.focus();p.setSelectionRange(p.value.length,p.value.length);},50);
 }
-function updFileModal(){const p=$('#fPath').value.trim()||'…';const l=$('#fSrcLine');if(l)l.textContent=SRC_TPL[cur.format](p);
+function updFileModal(){const p=$('#fPath').value.trim()||'…';const l=$('#fSrcLine');if(l)l.textContent=srcLine(cur.format,p);
   $('#fFileTag').textContent=cur.comment+cur.marker+'file '+($('#fName').value.trim()||'…');}
 ['#fPath','#fName'].forEach(id=>$(id).addEventListener('input',updFileModal));
 $('#fOk').onclick=()=>{
@@ -1349,7 +1433,7 @@ $('#fOk').onclick=()=>{
   if(!path||path.endsWith('/')){$('#fErr').textContent='Укажи путь к файлу';return;}
   if(cur.files.some(d=>d.path===path)){$('#fErr').textContent='Этот файл уже в конфиге';return;}
   const nd=doc(path,sampleText(cur,title));nd.saved='';cur.files.push(nd);
-  if($('#fSource').checked){const m=cur.files[0];pushHistory('src',0);m.text=m.text.replace(/\s*$/,'')+'\n'+SRC_TPL[cur.format](path);}
+  if($('#fSource').checked){const m=cur.files[0];pushHistory('src',0);m.text=m.text.replace(/\s*$/,'')+'\n'+srcLine(cur.format,path);}
   closeModals();state.parsed=parseCur();const fi=cur.files.length-1;renderAll();focusFile(fi);
   toast('Файл добавлен — сохрани, чтобы записать его на диск');
 };
@@ -1383,6 +1467,7 @@ async function bootBridge(){
     SYS.dots=st.dots;SYS.repo=st.repo;SYS.gear=st.gear;
     const c=hpCfg();c.live='file';c.liveNote='';
     if(st.hyprpanel&&st.hyprpanel.text!=null)hpLoadText(st.hyprpanel.text,st.hyprpanel.path);
+    try{USER_FORMATS=await BRIDGE.call('formats')||{};buildFormats();fillFormatSelect();}catch(e){}
     await loadRealConfigs();
     if(st.zoom)applyZoom(st.zoom,false);
     if(st.theme&&RICE.themes[st.theme])applyTheme(st.theme);
@@ -1440,10 +1525,10 @@ function applyZoom(z,persist=true){z=Math.max(60,Math.min(200,Math.round(z)));zo
   if(state.view==='system')renderSystemZoom();}
 
 /* ---------- страница «Система» ---------- */
-function openSystem(){if(state.capturing)stopCapture();state.view='system';$('#content').hidden=true;$('#sysview').hidden=false;renderSidebar();renderTop();renderSystem();
+function openSystem(){if(state.capturing)stopCapture();state.view='system';$('#content').hidden=true;$('#fmtview').hidden=true;$('#sysview').hidden=false;renderSidebar();renderTop();renderSystem();
   if(BRIDGE){BRIDGE.call('state').then(st=>{SYS.repo=st.repo;SYS.gear=st.gear;renderSystem();}).catch(()=>{});loadWallpapers();}
   loadDisplays();}
-function closeSystem(){state.view='cfg';$('#sysview').hidden=true;$('#content').hidden=false;}
+function closeSystem(){state.view='cfg';$('#sysview').hidden=true;$('#fmtview').hidden=true;$('#content').hidden=false;}
 function termAdd(text,kind){SYS.term.push({text,kind});if(SYS.term.length>400)SYS.term.splice(0,SYS.term.length-400);
   const el=document.getElementById('term');if(el){el.insertAdjacentHTML('beforeend',termLine(SYS.term[SYS.term.length-1]));el.scrollTop=el.scrollHeight;}}
 const termLine=l=>`<div class="${l.kind||''}">${esc(l.text)}</div>`;
@@ -1723,6 +1808,139 @@ async function updateRice(){if(SYS.busy)return;
     termAdd(r.message,r.ok?'ok':'err');if(r.needInstall)termAdd('! изменились пакеты или установщик — нажми «Запустить установщик в терминале»','err');}
   catch(e){termAdd('✗ '+e.message,'err');}
   setBusy('');renderSystem();}
+/* ---------- страница «Форматы» ---------- */
+const FMT_FIELDS=['label','comment','sep','tail','re','hook','quote','nest','open','close','join','src','srcTpl','check','sample'];
+const FS={sel:'conf',draft:null,isNew:false,timer:null,checkMsg:''};
+function fmtDraftOf(id){const f=FMT_BUILTIN[id]||USER_FORMATS[id]||{};const d={id};
+  FMT_FIELDS.forEach(k=>d[k]=k==='re'||k==='src'||k==='open'||k==='close'?reSrc(f[k]):String(f[k]??''));
+  if(!d.quote)d.quote='auto';if(!d.nest)d.nest='none';return d;}
+const NEW_FORMAT=()=>({id:'',label:'Мой формат',comment:'#',sep:' = ',tail:'',re:reSrc(FMT_BUILTIN.conf.re),hook:'',quote:'auto',nest:'none',open:'',close:'',join:':',
+  src:'',srcTpl:'',check:'',sample:'# пример: вставь сюда кусок своего конфига\nkey = value\nother = "text"'});
+function openFormats(id,isNew){if(state.capturing)stopCapture();
+  state.view='formats';$('#content').hidden=true;$('#sysview').hidden=true;$('#fmtview').hidden=false;
+  if(isNew){FS.isNew=true;FS.sel=null;FS.draft=NEW_FORMAT();}
+  else{FS.isNew=false;FS.sel=id||FS.sel||'conf';if(!FORMATS[FS.sel])FS.sel='conf';FS.draft=fmtDraftOf(FS.sel);}
+  FS.checkMsg='';renderSidebar();renderTop();renderFormats();}
+function fmtUsedBy(id){return configs.filter(c=>c.format===id).map(c=>c.name);}
+function renderFormats(){
+  const d=FS.draft,ro=!FS.isNew&&!!FMT_BUILTIN[FS.sel],dis=ro?'disabled':'';
+  const item=(k,f)=>`<button class="fi ${k===FS.sel&&!FS.isNew?'active':''}" data-f="${esc(k)}">${esc(f.label)}<small>${esc(k)}${fmtUsedBy(k).length?' · '+esc(fmtUsedBy(k).join(', ')):''}</small></button>`;
+  const user=Object.keys(USER_FORMATS);
+  const inp=(k,label,hint,ph='')=>`<div class="field"><label>${label}</label><input type="text" data-k="${k}" value="${esc(d[k])}" placeholder="${esc(ph)}" ${dis} spellcheck="false"><span class="ferr" id="fe-${k}"></span>${hint?`<span class="hint">${hint}</span>`:''}</div>`;
+  const sel=(k,label,opts,hint)=>`<div class="field"><label>${label}</label><select data-k="${k}" ${dis}>${opts.map(([v,t])=>`<option value="${v}" ${d[k]===v?'selected':''}>${esc(t)}</option>`).join('')}</select>${hint?`<span class="hint">${hint}</span>`:''}</div>`;
+  $('#fmtview').innerHTML=`<div class="fmtpage">
+  <div class="fmtlist"><div class="navlabel">Встроенные</div>${Object.keys(FMT_BUILTIN).map(k=>item(k,FORMATS[k])).join('')}
+    <div class="navlabel">Свои</div>${user.map(k=>item(k,FORMATS[k]||{label:k})).join('')||'<div class="hint" style="padding:0 10px;color:var(--muted);font-size:12px">пока нет</div>'}
+    <button class="btn ghost" id="fmtNew" style="margin-top:6px">＋ Новый формат</button></div>
+  <div class="fmted">
+    <div class="card">
+      <h2>${FS.isNew?'Новый формат':esc(d.label)}</h2>
+      <div class="sub">${ro?'Встроенный формат — только просмотр. «Сделать копию» — и меняй как хочешь, потом выбери копию в настройках разбора конфига.'
+        :'Описание строк своего конфига. Справа внизу — проверка на примере: видно, что программа поймёт в каждой строке.'}</div>
+      <div class="grid2">
+        ${inp('label','Название','','Мой формат')}
+        ${FS.isNew?inp('id','id (латиница)','Короткое имя: так формат записан у конфигов','myformat'):`<div class="field"><label>id</label><code style="padding:7px 0">${esc(FS.sel)}</code></div>`}
+        ${inp('comment','Комментарий','С чего начинается комментарий: <code>#</code>, <code>//</code>, <code>;</code>, <code>--</code>. К нему добавляется <code>@</code> — так получается разметка.','#')}
+        ${inp('sep','Разделитель для новых строк','Как писать «ключ разделитель значение» в примерах: <code> = </code>, <code>: </code>, пробел','= ')}
+      </div>
+      ${inp('re','Строка «ключ — значение» (регулярное выражение)','Пять групп в скобках по порядку: <b>отступ</b>, <b>ключ</b>, <b>разделитель</b>, <b>значение</b>, <b>хвост</b> (запятая, комментарий). Вместе они должны дать всю строку — иначе программа строку не тронет: так ничего не потеряется при записи.')}
+      <details ${d.hook.trim()?'open':''}><summary>Свой разбор на JavaScript — для совсем нестандартных строк</summary>
+        <textarea data-k="hook" rows="7" ${dis} spellcheck="false" placeholder="// line — строка файла. Верни [отступ, ключ, разделитель, значение, хвост] или null.
+// Пример: «set key to value»
+const m = line.match(/^(\\s*set )(\\w+)( to )(.*)$/);
+return m ? [m[1], m[2], m[3], m[4], ''] : null;">${esc(d.hook)}</textarea>
+        <span class="ferr" id="fe-hook"></span><span class="hint">Если заполнено — используется вместо регулярного выражения. Функция получает <code>line</code>; части снова должны склеиться ровно в строку.</span></details>
+      <div class="grid2">
+        ${sel('quote','Кавычки у значений',[['auto','"…" и \'…\' — снимать и возвращать'],['json','JSON: экранирование \\" \\n'],['none','не трогать']],'')}
+        ${inp('join','Склейка пути ключа','<code>general:gaps_in</code> или <code>logo.type</code>',':')}
+        ${sel('nest','Вложенность',[['none','нет'],['lines','блоки: строка входа и строка выхода'],['header','секции [name] до следующей'],['brackets','скобки { } [ ] по символам (JSON)']],'')}
+        <div></div>
+        ${d.nest==='lines'||d.nest==='header'||d.nest==='brackets'?inp('open',d.nest==='header'?'Строка секции (группа 1 — имя)':d.nest==='brackets'?'Имя блока в строке со скобкой (группа 1), необязательно':'Строка входа в блок (группа 1 — имя)','',d.nest==='header'?'^\\[(.+)\\]$':'^(\\w+)\\s*\\{$'):''}
+        ${d.nest==='lines'?inp('close','Строка выхода из блока','','^\\}$'):''}
+        ${inp('src','Подключение другого файла (группа 1 — путь)','Такие файлы станут разделами конфига. Пусто — подключений нет.','^\\s*include\\s+(.+)$')}
+        ${inp('srcTpl','Как писать подключение','<code>{path}</code> заменится путём','include {path}')}
+      </div>
+      ${inp('check','Проверка перед записью','<code>json</code> — проверить, что JSON читается; или команда, где <code>{file}</code> — временная копия с изменениями (например <code>hyprland --verify-config -c {file}</code>). Код ≠ 0 — программа не запишет файл. Пусто — без проверки.','json')}
+      <div class="fmtbar">
+        ${ro?`<button class="btn primary" id="fmtCopy">Сделать копию</button>`
+          :`<button class="btn primary" id="fmtSave">${FS.isNew?'Создать формат':'Сохранить'}</button>${FS.isNew?'':`<button class="btn" id="fmtCopy">Копия</button><button class="btn" id="fmtDel">Удалить</button>`}`}
+        <span class="hint" id="fmtSaveMsg"></span>
+      </div>
+    </div>
+    <div class="card" style="margin-top:14px">
+      <h2>Проверка на примере</h2>
+      <div class="sub">Вставь кусок настоящего конфига — таблица покажет, что программа увидит в каждой строке. Пример хранится вместе с форматом.</div>
+      <textarea data-k="sample" rows="9" spellcheck="false" ${ro?'':''}>${esc(d.sample)}</textarea>
+      <div class="fmtbar"><button class="btn small" id="fmtCheck">Проверить пример командой проверки</button><span class="hint" id="fmtCheckMsg">${esc(FS.checkMsg)}</span></div>
+      <div id="fmtTest"></div>
+    </div>
+  </div></div>`;
+  $$('#fmtview .fi').forEach(b=>b.onclick=()=>openFormats(b.dataset.f));
+  $('#fmtNew').onclick=()=>openFormats(null,true);
+  $$('#fmtview [data-k]').forEach(el=>{
+    const ev=el.tagName==='SELECT'?'change':'input';
+    el.addEventListener(ev,()=>{FS.draft[el.dataset.k]=el.value;
+      if(el.dataset.k==='nest'){renderFormats();return;}
+      clearTimeout(FS.timer);FS.timer=setTimeout(fmtRunTest,150);});});
+  const cp=$('#fmtCopy');if(cp)cp.onclick=()=>{const src=FS.draft;FS.isNew=true;FS.sel=null;
+    FS.draft={...src,id:(src.id||'format').replace(/[^a-z0-9_-]/g,'')+'-my',label:src.label+' (моя копия)'};renderFormats();toast('Это копия — поправь и нажми «Создать формат»');};
+  const sv=$('#fmtSave');if(sv)sv.onclick=fmtSave;
+  const dl=$('#fmtDel');if(dl)dl.onclick=fmtDelete;
+  $('#fmtCheck').onclick=fmtCheckSample;
+  fmtRunTest();}
+function fmtCompiledDraft(){const d=FS.draft,spec={};FMT_FIELDS.forEach(k=>spec[k]=d[k]);return compileFormat(d.id||'__draft',spec,false);}
+function fmtRunTest(){
+  const d=FS.draft,f=fmtCompiledDraft();
+  ['re','hook','open','close','src','id'].forEach(k=>{const el=document.getElementById('fe-'+k);if(el)el.textContent=f.errs[k]?'⚠ '+f.errs[k]:'';});
+  const idEl=document.getElementById('fe-id');
+  if(idEl&&FS.isNew){const id=String(d.id||'').trim();
+    idEl.textContent=!id?'':!/^[a-z0-9][a-z0-9_-]{0,40}$/.test(id)?'⚠ латиница, цифры, - и _':FORMATS[id]?'⚠ такой id уже есть':'';}
+  const tmp='__fmtdraft';FORMATS[tmp]=f;
+  let r;try{r=parseMarkup({format:tmp,comment:f.comment,marker:'@',start:{mode:'all',begin:'',end:''},follow:true,explain:true},{text:d.sample||''});}
+  catch(e){delete FORMATS[tmp];$('#fmtTest').innerHTML=`<div class="ferr">Ошибка разбора: ${esc(e.message)}</div>`;return;}
+  delete FORMATS[tmp];
+  let nv=0,ns=0,nx=0,nw=0;
+  const rows=r.lines.map((l,i)=>{const inf=r.info[i];let res;
+    if(inf.kind==='val'){const it=r.items[inf.item];nv++;
+      const back=it.block?l:it.pre+it.keyRaw+it.sep+(it.quoted==='json'?JSON.stringify(String(it.value)):it.quoted?it.quoted+it.value+it.quoted:it.value)+it.post;
+      res=`<span class="k">${esc(it.path)}</span> = <span class="v">${esc(it.value)}</span>${it.quoted?` <span class="hint">в кавычках</span>`:''}`;
+      if(back!==l){nw++;res+=`<br><span class="w">⚠ при записи строка изменится: ${esc(back)}</span>`;}}
+    else if(inf.kind==='src'){ns++;res=`<span class="o">подключает файл</span> ${esc(inf.target)}`;}
+    else if(inf.kind==='open')res=`<span class="o">вход в блок${inf.name?' «'+esc(inf.name)+'»':''}</span>`;
+    else if(inf.kind==='close')res=`<span class="o">выход из блока</span>`;
+    else if(inf.kind==='ann')res=`<span class="a">разметка</span>`;
+    else if(inf.kind==='cmt')res='комментарий';
+    else if(!l.trim())res='';
+    else{nx++;res='<span class="hint">не разобрано — программа эту строку не тронет</span>';}
+    return `<tr><td class="n">${i+1}</td><td class="l" title="${esc(l)}">${esc(l)||' '}</td><td class="r">${res}</td></tr>`;}).join('');
+  const errs=Object.values(f.errs);
+  $('#fmtTest').innerHTML=`<div class="fmtsum">Значений: <b>${nv}</b> · подключений: <b>${ns}</b> · не разобрано: <b>${nx}</b>${nw?` · <span class="w" style="color:var(--danger)">строк, которые запись изменит: ${nw}</span>`:''}${errs.length?` · <span style="color:var(--danger)">ошибок в правилах: ${errs.length}</span>`:''}</div>
+    <table class="fmttest">${rows}</table>`;}
+async function fmtSave(){const d=FS.draft,f=fmtCompiledDraft(),id=String(FS.isNew?d.id:FS.sel||'').trim();
+  const msg=t=>{$('#fmtSaveMsg').textContent=t;};
+  if(!/^[a-z0-9][a-z0-9_-]{0,40}$/.test(id))return msg('⚠ Задай id: латиница, цифры, - и _');
+  if(FS.isNew&&FORMATS[id])return msg('⚠ Формат с таким id уже есть');
+  const errs=Object.entries(f.errs);if(errs.length)return msg('⚠ Исправь правила: '+errs.map(([k,v])=>k+' — '+v).join('; '));
+  const spec={id};FMT_FIELDS.forEach(k=>{if(String(d[k]??'')!=='')spec[k]=d[k];});
+  if(BRIDGE){try{USER_FORMATS=await BRIDGE.call('saveFormat',{fmt:spec});}catch(e){return msg('⚠ '+e.message);}}
+  else{const {id:_,...rest}=spec;USER_FORMATS[id]=rest;}
+  buildFormats();fillFormatSelect();FS.isNew=false;FS.sel=id;FS.draft=fmtDraftOf(id);
+  configs.forEach(c=>{if(c.format===id&&c===cur)state.parsed=parseCur();});
+  renderFormats();toast(BRIDGE?`Формат «${FORMATS[id].label}» сохранён в ~/.config/mors-settings/settings.json`:`Формат сохранён (в прототипе — до перезагрузки страницы)`);}
+async function fmtDelete(){const id=FS.sel,used=fmtUsedBy(id);
+  if(used.length){toast('Формат используют: '+used.join(', ')+' — сначала поменяй им формат',true);return;}
+  if(BRIDGE){try{USER_FORMATS=await BRIDGE.call('removeFormat',{id});}catch(e){toast(e.message,true);return;}}
+  else delete USER_FORMATS[id];
+  buildFormats();fillFormatSelect();openFormats('conf');toast('Формат удалён');}
+async function fmtCheckSample(){const d=FS.draft,c=String(d.check||'').trim();
+  if(!c){FS.checkMsg='проверка не задана';$('#fmtCheckMsg').textContent=FS.checkMsg;return;}
+  if(!BRIDGE){FS.checkMsg=c==='json'?'в программе здесь проверится, что пример читается как JSON':`в программе здесь запустится: ${c}`;$('#fmtCheckMsg').textContent=FS.checkMsg;return;}
+  $('#fmtCheckMsg').textContent='проверяю…';
+  try{const r=await BRIDGE.call('testCheck',{check:c,text:d.sample||'',name:'sample'+(d.id==='jsonc'||c==='json'?'.jsonc':'.conf')});
+    FS.checkMsg=r.ok?'✓ проверка прошла':'✗ '+r.msg.replace(/^не сохранил [^:]+: /,'');}
+  catch(e){FS.checkMsg='✗ '+e.message;}
+  $('#fmtCheckMsg').textContent=FS.checkMsg;}
+$('#fmtBtn').onclick=()=>state.view==='formats'?selectConfig(cur):openFormats();
 $('#sysBtn').onclick=()=>state.view==='system'?selectConfig(cur):openSystem();
 document.addEventListener('keydown',e=>{if(!(e.ctrlKey||e.metaKey))return;
   if(e.key==='='||e.key==='+'){e.preventDefault();applyZoom(zoom+10);}

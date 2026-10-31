@@ -331,7 +331,15 @@ class Backend:
         """Главный файл + всё, что он подключает (рекурсивно, без повторов)."""
         import re
         main = pathlib.Path(os.path.expanduser(cfg['path']))
-        rx = re.compile(self.FORMAT_SRC.get(cfg.get('format', 'conf'), r'(?!)'), re.M)
+        fmt = cfg.get('format', 'conf')
+        src = self.FORMAT_SRC.get(fmt)
+        if src is None:                                   # свой формат из «Форматы»
+            src = (self._user_formats().get(fmt) or {}).get('src') or r'(?!)'
+            src = re.sub(r'\(\?<(?![=!])', '(?P<', src)       # именованные группы JS → Python
+        try:
+            rx = re.compile(src, re.M)
+        except re.error as e:
+            raise ValueError(f'формат {fmt}: неверное правило подключения файлов ({e})')
         order, seen = [], set()
 
         def walk(path):
@@ -385,6 +393,81 @@ class Backend:
         self.save_settings(configs=lst)
         return {**cfg, 'files': self._read_tree(cfg)}
 
+    # ---- свои форматы конфигов (страница «Форматы»)
+    BUILTIN_FORMATS = ('conf', 'space', 'ini', 'lua', 'jsonc')
+    FORMAT_KEYS = ('label', 'comment', 'sep', 'tail', 're', 'hook', 'quote', 'nest', 'open', 'close', 'join',
+                   'src', 'srcTpl', 'check', 'sample')
+
+    def _user_formats(self):
+        f = self.settings().get('formats', {})
+        return f if isinstance(f, dict) else {}
+
+    def cmd_formats(self):
+        return self._user_formats()
+
+    def cmd_saveFormat(self, fmt):
+        import re
+        fid = str(fmt.get('id', '')).strip()
+        if not re.fullmatch(r'[a-z0-9][a-z0-9_-]{0,40}', fid):
+            raise ValueError('id формата: латиница, цифры, - и _')
+        if fid in self.BUILTIN_FORMATS:
+            raise ValueError(f'«{fid}» — встроенный формат, выбери другое id')
+        clean = {k: fmt[k] for k in self.FORMAT_KEYS if k in fmt and isinstance(fmt[k], (str, int, float, bool))}
+        if clean.get('src'):
+            try:
+                re.compile(re.sub(r'\(\?<(?![=!])', '(?P<', clean['src']))
+            except re.error as e:
+                raise ValueError(f'правило подключения файлов: {e}')
+        allf = self._user_formats(); allf[fid] = clean
+        self.save_settings(formats=allf)
+        return allf
+
+    def cmd_removeFormat(self, id):
+        used = [c['name'] for c in self._user_configs() if c.get('format') == id]
+        if used:
+            raise ValueError('формат используют конфиги: ' + ', '.join(used) + ' — сначала поменяй им формат')
+        allf = self._user_formats(); allf.pop(id, None)
+        self.save_settings(formats=allf)
+        return allf
+
+    def _check_for(self, cfg, real):
+        """Какая проверка у конфига: json для jsonc и *.json, своя — из формата, иначе никакой."""
+        fmt = cfg.get('format')
+        check = 'json' if fmt == 'jsonc' else (self._user_formats().get(fmt) or {}).get('check', '')
+        return (check or ('json' if real.suffix in ('.json', '.jsonc') else '')).strip()
+
+    def _check_text(self, check, real, text, path):
+        """Проверка перед записью: json — сами; команда — на временной копии ({file}); ненулевой код — отказ."""
+        if not check or check == 'none':
+            return
+        if check == 'json':
+            err = jsonc_error(text)
+            if err:
+                raise ValueError(f'не сохранил {path}: получился неверный JSON ({err}). Файл на диске не тронут')
+            return
+        import shlex, tempfile
+        with tempfile.TemporaryDirectory(prefix='mors-check-') as td:
+            tmp = pathlib.Path(td) / (real.name or 'config')
+            tmp.write_text(text)
+            cmd = check.replace('{file}', shlex.quote(str(tmp)))
+            try:
+                p = subprocess.run(['sh', '-c', cmd], capture_output=True, text=True, timeout=20,
+                                   cwd=str(real.parent) if real.parent.is_dir() else None)
+            except subprocess.TimeoutExpired:
+                raise ValueError(f'не сохранил {path}: проверка «{check}» не ответила за 20 с')
+            if p.returncode != 0:
+                out = (p.stderr or p.stdout or '').strip().splitlines()[-3:]
+                raise ValueError(f'не сохранил {path}: проверка не прошла (код {p.returncode})'
+                                 + (': ' + ' / '.join(out) if out else '') + '. Файл на диске не тронут')
+
+    def cmd_testCheck(self, check, text, name='config'):
+        """Кнопка «Проверить» на странице форматов: тот же путь, что и перед записью."""
+        try:
+            self._check_text(check, pathlib.Path(os.path.expanduser(name)), text, name)
+            return {'ok': True}
+        except ValueError as e:
+            return {'ok': False, 'msg': str(e)}
+
     def cmd_updateConfig(self, cfg):
         if cfg.get('id') in ('hyprland', 'kitty'):
             return True
@@ -405,10 +488,7 @@ class Backend:
             raise PermissionError(f'запись вне ~/.config и mors-dots запрещена: {path}')
         real = p.resolve()
         cfg = next((c for c in self.BUILTIN + self._user_configs() if c['id'] == id), {})
-        if cfg.get('format') == 'jsonc' or real.suffix in ('.json', '.jsonc'):
-            err = jsonc_error(text)                     # битый JSON не пишем — программа (fastfetch) не запустится
-            if err:
-                raise ValueError(f'не сохранил {path}: получился неверный JSON ({err}). Файл на диске не тронут')
+        self._check_text(self._check_for(cfg, real), real, text, path)          # битое не пишем — программа (fastfetch…) не запустится
         backup = None
         if real.exists() and real not in self.hypr_backed:
             bdir = CACHE_DIR / 'backups' / f'{datetime.datetime.now():%Y%m%d-%H%M%S}'
