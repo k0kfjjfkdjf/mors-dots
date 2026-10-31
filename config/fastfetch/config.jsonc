@@ -1,107 +1,143 @@
+//@file fastfetch
+// Строки //@ — разметка для mors-settings (configurator/): по ним рисуется окно настроек.
+// type: block — переключатель модуля: выключенный модуль просто закомментирован (//).
 {
     "$schema": "https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json",
+//@section Логотип
     "logo": {
+        //@name: Тип логотипа | type: enum | options: auto, builtin, small, file, kitty, kitty-direct, sixel, chafa, none | desc: auto — картинка, если терминал умеет (kitty), иначе значок дистрибутива
         "type": "auto",
+        //@name: Картинки | type: string | desc: Путь или маска; при нескольких файлах fastfetch берёт случайный
         "source": "~/.config/fastfetch/images/*.png",
+        //@name: Высота логотипа | type: int | range: 5-40 | desc: В строках терминала
         "height": 15
     },
+//@end
+//@section Оформление
     "display": {
+        //@name: Разделитель | type: string | desc: Между значком и значением
         "separator": " "
     },
+//@end
     "modules": [
-	"break",
         "break",
         "break",
-	{
+        "break",
+        {
             "type": "custom",
             "format": "\u001b[90m  \u001b[31m  \u001b[32m  \u001b[33m  \u001b[34m  \u001b[35m  \u001b[36m  \u001b[37m  "
         },
-	"break",
-	{
+        "break",
+//@section Заголовок
+        {
             "type": "title",
+            //@name: Отступ после заголовка | type: int | range: 0-30 | desc: keyWidth модуля «пользователь@машина»
             "keyWidth": 10
         },
+//@end
         "break",
+//@section Система
+        //@name: Система (ОС) | type: block
         {
             "type": "os",
             "key": " ",
+            //@name: Цвет значков | type: enum | options: 34, 31, 32, 33, 35, 36, 37, blue, magenta, cyan | desc: 34 — синий (color4 темы)
             "keyColor": "34",  // = color4
         },
+        //@name: Ядро | type: block
         {
             "type": "kernel",
             "key": " ",
             "keyColor": "34",
         },
+        //@name: Пакеты | type: block
         {
             "type": "packages",
             // "format": "{} (pacman)",
             "key": " ",
-            "keyColor": "34",  
+            "keyColor": "34",
         },
+        //@name: Оболочка | type: block
         {
             "type": "shell",
             "key": " ",
             "keyColor": "34", },
+//@end
         "break",
+//@section Сеанс
+        //@name: Терминал | type: block
         // {
         //     "type": "terminal",
         //     "key": " ",
-        //     "keyColor": "34", 
+        //     "keyColor": "34",
         // },
+        //@name: Оконный менеджер | type: block
         {
             "type": "wm",
             "key": " ",
-            "keyColor": "34", 
+            "keyColor": "34",
         },
+        //@name: Курсор | type: block
         // {
         //     "type": "cursor",
         //     "key": " ",
-        //     "keyColor": "34", 
+        //     "keyColor": "34",
         // },
+        //@name: Шрифт терминала | type: block
         // {
         //     "type": "terminalfont",
         //     "key": " ",
-        //     "keyColor": "34", 
+        //     "keyColor": "34",
         // },
+        //@name: Время работы | type: block
         {
             "type": "uptime",
             "key": " ",
-            "keyColor": "34", 
+            "keyColor": "34",
         },
+        //@name: Дней с установки | type: block | desc: Считается по дате создания корневого раздела
         {
             "type": "command",
             "key": "󱦟 ",
             "keyColor": "34",
             "text": "birth_install=$(stat -c %W /); current=$(date +%s); time_progression=$((current - birth_install)); days_difference=$((time_progression / 86400)); echo $days_difference days"
         },
+        //@name: Дата и время | type: block
         // {
         //     "type": "datetime",
         //     "format": "{1}-{3}-{11}",
         //     "key": " ",
-        //     "keyColor": "34", 
+        //     "keyColor": "34",
         // },
+        //@name: Что играет | type: block
         {
             "type": "media",
             "key": "󰝚 ",
-            "keyColor": "34", 
+            "keyColor": "34",
         },
+//@end
         // "break",
         "break",
+//@section Железо
+        //@name: Процессор | type: block
         {
             "type": "cpu",
             "key": " ",
             "keyColor": "blue"
         },
+        //@name: Видеокарта | type: block
         {
             "type": "gpu",
             "key": " ",
             "keyColor": "blue"
         },
+        //@name: Память | type: block
         {
             "type": "memory",
             "key": " ",
             "keyColor": "blue"
         },
+//@end
         "break",
         {
             "type": "custom",

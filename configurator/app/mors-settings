@@ -274,6 +274,8 @@ class Backend:
         {'id': 'hyprland', 'name': 'Hyprland', 'builtin': True},
         {'id': 'kitty', 'name': 'Kitty', 'builtin': True, 'path': '~/.config/kitty/kitty.conf', 'format': 'space',
          'comment': '#', 'marker': '@', 'follow': True, 'reload': 'pkill -USR1 -x kitty'},
+        {'id': 'fastfetch', 'name': 'fastfetch', 'builtin': True, 'path': '~/.config/fastfetch/config.jsonc',
+         'format': 'jsonc', 'comment': '//', 'marker': '@', 'follow': False},
     ]
     FORMAT_SRC = {   # строки подключения других файлов
         'conf': r'^\s*source\s*=\s*(.+?)\s*$', 'space': r'^\s*include\s+(.+?)\s*$',

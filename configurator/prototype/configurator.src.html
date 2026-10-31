@@ -518,9 +518,23 @@ const FORMATS={
   conf:{label:'ключ = значение (Hyprland, .conf)',comment:'#',sep:' = ',tail:'',src:/^\s*source\s*=\s*(.+?)\s*$/,re:/^(\s*)([^\s=#{}][^=]*?)(\s*=\s*)(.*?)(\s*)$/},
   space:{label:'ключ значение (kitty, i3)',comment:'#',sep:' ',tail:'',src:/^\s*include\s+(.+?)\s*$/,re:/^(\s*)([^\s#]+)(\s+)(.*?)(\s*)$/},
   ini:{label:'INI / TOML (foot, mako)',comment:'#',sep:' = ',tail:'',src:/^\s*include\s*=\s*(.+?)\s*$/,re:/^(\s*)([^\s=#;\[][^=]*?)(\s*=\s*)(.*?)(\s*)$/},
-  lua:{label:'Lua (hyprland.lua, nvim)',comment:'--',sep:' = ',tail:',',src:/^\s*(?:dofile|require)\s*\(?\s*["'](.+?)["']\s*\)?\s*$/,re:/^(\s*)([\w.]+)(\s*=\s*)("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^"',\s][^,]*?)(\s*,?\s*(?:--.*)?)$/}
+  lua:{label:'Lua (hyprland.lua, nvim)',comment:'--',sep:' = ',tail:',',src:/^\s*(?:dofile|require)\s*\(?\s*["'](.+?)["']\s*\)?\s*$/,re:/^(\s*)([\w.]+)(\s*=\s*)("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^"',\s][^,]*?)(\s*,?\s*(?:--.*)?)$/},
+  jsonc:{label:'JSON / JSONC (fastfetch, waybar)',comment:'//',sep:': ',tail:',',src:/^(?!)$/,re:/^(\s*)("(?:\\.|[^"\\])*")(\s*:\s*)("(?:\\.|[^"\\])*"|[^",\s{\[][^,]*?)(\s*,?\s*(?:\/\/.*)?)$/}
 };
-const SRC_TPL={conf:p=>`source = ${p}`,space:p=>`include ${p}`,ini:p=>`include = ${p}`,lua:p=>`require("${luaModule(p)}")`};
+/* JSON(C): скобки строки по порядку (без строк в кавычках и хвостового //-комментария) */
+function jsonBraces(line){const out=[];let q=false;
+  for(let i=0;i<line.length;i++){const c=line[i];
+    if(q){if(c==='\\')i++;else if(c==='"')q=false;continue;}
+    if(c==='"')q=true;else if(c==='/'&&line[i+1]==='/')break;else if('{['.includes(c)||'}]'.includes(c))out.push(c);}
+  return out;}
+const uncomment=l=>l.replace(/^(\s*)\/\/ ?/,'$1');
+/* type: block — блок {...} под строкой разметки; выключен = все его строки закомментированы */
+function blockRange(lines,i){const off=/^\s*\/\//.test(lines[i]);let depth=0,seen=false;
+  for(let j=i;j<lines.length;j++){const l=off?uncomment(lines[j]):lines[j];
+    for(const c of jsonBraces(l)){if('{['.includes(c)){depth++;seen=true;}else depth--;}
+    if(seen&&depth<=0)return {end:j,off};}
+  return null;}
+const SRC_TPL={conf:p=>`source = ${p}`,space:p=>`include ${p}`,ini:p=>`include = ${p}`,jsonc:()=>'// в JSON нет подключения файлов — добавь файл в список вручную',lua:p=>`require("${luaModule(p)}")`};
 const luaModule=p=>String(p).replace(/^.*?\/hypr\//,'').replace(/\.lua$/,'').replace(/\//g,'.');
 
 /* ---------- демо-данные: Hyprland из нескольких файлов ---------- */
@@ -648,6 +662,7 @@ const HP=/*HP_DATA*/null;
    (inotify / Gio.FileMonitor). rice.py apply пишет туда имя темы — программа перекрашивается сама.
    В прототипе файлы недоступны, поэтому темы встроены, а смену имитируют кнопки. */
 const RICE=/*RICE_DATA*/null;
+const FASTFETCH=/*FASTFETCH_DATA*/null;
 let riceCurrent=RICE.current;
 function applyTheme(id,announce){
   const t=RICE.themes[id];if(!t)return;riceCurrent=id;const p=t.palette,c=k=>p[k]||k,acc=t.accent;
@@ -689,6 +704,8 @@ const configs=[
    files:[doc('~/.config/hypr/hyprland.conf',H_MAIN),doc('~/.config/hypr/conf/look.conf',H_LOOK),doc('~/.config/hypr/conf/input.conf',H_INPUT),doc('~/.config/hypr/conf/binds.conf',H_BINDS),doc('~/.config/hypr/conf/autostart.conf',H_AUTO)]},
   {name:'Kitty',mode:'markup',format:'space',comment:'#',marker:'@',follow:false,start:{mode:'marker',begin:'#@cfgui:start',end:''},live:null,liveNote:'kitty перечитывает конфиг по Ctrl+Shift+F5',
    files:[doc('~/.config/kitty/kitty.conf',KITTY)]},
+  ...(FASTFETCH?[{name:'fastfetch',mode:'markup',format:'jsonc',comment:'//',marker:'@',follow:false,start:{mode:'all',begin:'',end:''},live:null,liveNote:'fastfetch читает конфиг при каждом запуске — открой новый терминал',
+   files:[doc('~/.config/fastfetch/config.jsonc',FASTFETCH)]}]:[]),
   {name:'HyprPanel',mode:'adapter',hp:true,format:'json',schemaFile:'hyprpanel.ru.toml',schema:HP_SCHEMA,live:null,liveNote:'HyprPanel сам перечитывает config.json — изменения применятся сразу после сохранения',
    files:[doc('~/.config/hyprpanel/config.json',JSON.stringify(HP.user,null,2))]}
 ];
@@ -703,16 +720,30 @@ function parseMarkup(cfg,d){
   const info=lines.map(()=>({kind:'plain'})),items=[],stack=[];
   let section='Без раздела',pending=null,title=null,active=cfg.start.mode==='all';
   const B=(cfg.start.begin||'').trim(),E=(cfg.start.end||'').trim();
+  const J=cfg.format==='jsonc';
   for(let i=0;i<lines.length;i++){
     const raw=lines[i],t=raw.trim();let m;
+    if(pending&&(pending.type||'').toLowerCase()==='block'&&t&&!t.startsWith(tag)){
+      const r=blockRange(lines,i);
+      if(r){items.push({line:i,end:r.end,block:true,meta:pending,value:r.off?'false':'true',section,key:pending.name,path:pending.name});
+        info[i]={kind:'val',item:items.length-1};}
+      pending=null;
+      if(!r||r.off){if(r&&r.off)for(let j=i+1;j<=r.end;j++)info[j]={kind:'cmt'};if(r&&r.off){i=r.end;}continue;}
+    }
     if(t.startsWith(tag+'file')){title=t.slice((tag+'file').length).trim()||null;info[i]={kind:'ann'};continue;}
     if(cfg.follow&&(m=raw.match(fmt.src))){info[i]={kind:'src',target:m[1]};continue;}
     if(cfg.start.mode!=='all'){
       if(B&&t===B){active=true;info[i]={kind:'marker'};continue;}
       if(cfg.start.mode==='between'&&E&&t===E){active=false;info[i]={kind:'marker'};pending=null;continue;}
     }
-    if(cfg.format!=='space'&&(m=t.match(/^([\w.:\-]+)\s*(=\s*)?\{\s*$/))){stack.push(m[1]);if(!active)info[i]={kind:'out'};continue;}
-    if(/^\}\s*\)?\s*,?$/.test(t)){stack.pop();if(!active)info[i]={kind:'out'};continue;}
+    if(J&&!t.startsWith('//')){
+      const br=jsonBraces(raw);
+      if(br.length){const k=(raw.match(/^\s*"((?:\\.|[^"\\])*)"\s*:/)||[])[1];let first=true;
+        br.forEach(c=>{if('{['.includes(c)){stack.push(first&&k?k:'');first=false;}else stack.pop();});
+        if(!/:\s*("|[^\s{\[])/.test(raw)||info[i].kind==='val'){if(!active&&info[i].kind!=='val')info[i]={kind:'out'};continue;}}
+    }
+    if(!J&&cfg.format!=='space'&&(m=t.match(/^([\w.:\-]+)\s*(=\s*)?\{\s*$/))){stack.push(m[1]);if(!active)info[i]={kind:'out'};continue;}
+    if(!J&&/^\}\s*\)?\s*,?$/.test(t)){stack.pop();if(!active)info[i]={kind:'out'};continue;}
     if(!active){info[i]={kind:'out'};continue;}
     if(t.startsWith(tag)){
       const body=t.slice(tag.length).trim();info[i]={kind:'ann'};
@@ -725,9 +756,10 @@ function parseMarkup(cfg,d){
     if(!t)continue;
     if(pending&&(m=raw.match(fmt.re))){
       let val=m[4],quoted=false;
-      if(/^".*"$/.test(val)||/^'.*'$/.test(val)){quoted=val[0];val=val.slice(1,-1);}
-      const key=m[2].trim();
-      items.push({line:i,meta:pending,pre:m[1],keyRaw:m[2],sep:m[3],post:m[5],value:val,quoted,section,key,path:[...stack,key].join(cfg.format==='lua'?'.':':')});
+      if(J&&/^".*"$/.test(val)){quoted='json';try{val=JSON.parse(val);}catch(e){val=val.slice(1,-1);}}
+      else if(/^".*"$/.test(val)||/^'.*'$/.test(val)){quoted=val[0];val=val.slice(1,-1);}
+      const key=J?m[2].trim().slice(1,-1):m[2].trim();
+      items.push({line:i,meta:pending,pre:m[1],keyRaw:m[2],sep:m[3],post:m[5],value:val,quoted,section,key,path:[...stack.filter(Boolean),key].join(cfg.format==='lua'||J?'.':':')});
       info[i]={kind:'val',item:items.length-1};
     }
     pending=null;
@@ -798,7 +830,12 @@ function coerce(type,v){if(type==='bool')return isTrue(v);if(type==='int'||type=
 function setValue(g,nv,opts={}){
   const it=state.parsed.items[g],d=cur.files[it.fi];pushHistory('v'+g,it.fi);
   if(cur.mode==='adapter'){const obj=JSON.parse(d.text);obj[it.key]=typeof nv==='string'?coerce(it.meta.type,nv):nv;d.text=JSON.stringify(obj,null,2);}
-  else{const lines=d.text.split('\n');const v=it.quoted?it.quoted+nv+it.quoted:nv;lines[it.line]=it.pre+it.keyRaw+it.sep+v+it.post;d.text=lines.join('\n');}
+  else if(it.block){const lines=d.text.split('\n'),on=isTrue(nv);
+    const ind=lines[it.line].match(/^\s*/)[0];   // «// » ставится на отступ блока — как комментируют руками
+    for(let j=it.line;j<=it.end;j++){if(!lines[j].trim())continue;
+      lines[j]=on?uncomment(lines[j]):lines[j].startsWith(ind)?ind+'// '+lines[j].slice(ind.length):lines[j].replace(/^(\s*)/,'$1// ');}
+    d.text=lines.join('\n');}
+  else{const lines=d.text.split('\n');const v=it.quoted==='json'?JSON.stringify(String(nv)):it.quoted?it.quoted+nv+it.quoted:nv;lines[it.line]=it.pre+it.keyRaw+it.sep+v+it.post;d.text=lines.join('\n');}
   state.parsed=parseCur();state.file=it.fi;
   if(opts.rerender)renderForm();else markRows();
   if(cur.hp){hpMarkRow(g);if(BRIDGE&&state.live)hpScheduleWrite();}
@@ -811,7 +848,8 @@ function itemModified(it){
   const d=cur.files[it.fi];
   if(cur.mode==='adapter')return JSON.stringify(savedValue(it))!==JSON.stringify(it.value);
   if(it.line<0)return false;
-  return d.saved.split('\n')[it.line]!==state.parsed.files[it.fi].lines[it.line];
+  const sv=d.saved.split('\n'),nw=state.parsed.files[it.fi].lines;
+  for(let j=it.line;j<=(it.block?it.end:it.line);j++)if(sv[j]!==nw[j])return true;return false;
 }
 function markRows(){
   state.parsed.items.forEach(it=>{const r=document.getElementById('row-'+it.g);if(r)r.classList.toggle('modified',itemModified(it));});
@@ -820,7 +858,7 @@ function markRows(){
 function diffLines(d){const a=d.text.split('\n'),b=d.saved.split('\n');let n=0;for(let i=0;i<Math.max(a.length,b.length);i++)if(a[i]!==b[i])n++;return n;}
 function resetItem(g){const it=state.parsed.items[g],d=cur.files[it.fi];pushHistory('r',it.fi);
   if(cur.mode==='adapter'){const obj=JSON.parse(d.text),s=JSON.parse(d.saved);if(it.key in s)obj[it.key]=s[it.key];else delete obj[it.key];d.text=JSON.stringify(obj,null,2);}
-  else{const l=d.text.split('\n');l[it.line]=d.saved.split('\n')[it.line];d.text=l.join('\n');}
+  else{const l=d.text.split('\n'),sv=d.saved.split('\n');for(let j=it.line;j<=(it.block?it.end:it.line);j++)l[j]=sv[j];d.text=l.join('\n');}
   state.parsed=parseCur();state.file=it.fi;renderAll(it.line);toast('Значение возвращено к сохранённому');
   if(cur.real&&state.live)realScheduleWrite();}
 function undo(){const e=cur.history.pop();if(!e){toast('Нечего отменять');return;}
@@ -1045,7 +1083,7 @@ function controlHTML(it,g){
   if(cur.format==='lua'&&!luaLiteral(it))return `<code class="roval" title="Это выражение, а не значение — его задаёт тема rice или код">${esc(v)}</code><span class="tag rice">${/^t\./.test(v)?'из темы':'выражение'}</span>`;
   if(t==='int'||t==='float'){const [mn,mx]=parseRange(m.range,t),st=m.step||(t==='int'?1:0.1);
     return `<input type="range" min="${mn}" max="${mx}" step="${st}" value="${esc(v)}" data-role="range" ${d}><input class="num" type="number" min="${mn}" max="${mx}" step="${st}" value="${esc(v)}" data-role="num" ${d}>`;}
-  if(t==='bool')return `<label class="switch"><input type="checkbox" ${isTrue(v)?'checked':''} data-role="bool" ${d}><span></span></label>`;
+  if(t==='bool'||t==='block')return `<label class="switch"><input type="checkbox" ${isTrue(v)?'checked':''} data-role="bool" ${d}><span></span></label>`;
   if(t==='enum'){const o=(m.options||'').split(',').map(s=>s.trim()).filter(Boolean);if(!o.includes(v))o.unshift(v);
     return `<select data-role="enum" ${d}>${o.map(x=>`<option ${x===v?'selected':''}>${esc(x)}</option>`).join('')}</select>`;}
   if(t==='color'){const c=parseColor(v);if(c)return `<input type="color" value="${c.hex}" data-role="color" ${d}><input type="range" class="alpha" min="0" max="255" value="${c.a}" data-role="alpha" ${d} title="Прозрачность"><code class="craw" id="craw-${g}">${esc(v)}</code>`;}
@@ -1114,7 +1152,9 @@ function renderChips(){const el=$('#filechips');
   el.querySelectorAll('.fchip').forEach(b=>b.onclick=()=>{state.file=+b.dataset.fi;renderChips();renderSidebar();renderPane();});
   const a=el.querySelector('.fchip.active');if(a)a.scrollIntoView({block:'nearest',inline:'nearest'});}
 function hlLine(l,inf){
-  if(inf.kind==='val'&&cur.mode!=='adapter'){const it=state.parsed.items[inf.g];const v=it.quoted?it.quoted+it.value+it.quoted:it.value;
+  if(inf.kind==='val'&&cur.mode!=='adapter'){const it=state.parsed.items[inf.g];
+    if(it.block)return `<span class="v">${esc(l)}</span>`;
+    const v=it.quoted==='json'?JSON.stringify(String(it.value)):it.quoted?it.quoted+it.value+it.quoted:it.value;
     return esc(it.pre)+`<span class="k">${esc(it.keyRaw)}</span><span class="op">${esc(it.sep)}</span><span class="v">${esc(v)}</span>`+esc(it.post);}
   if(inf.kind==='val'){const m=l.match(/^(\s*)(".*?")(:\s*)(.*)$/);if(m)return esc(m[1])+`<span class="k">${esc(m[2])}</span><span class="op">${esc(m[3])}</span><span class="v">${esc(m[4])}</span>`;}
   return esc(l)||' ';}
@@ -1178,6 +1218,9 @@ gaps_in = 5</pre>
   <tr><td><code>enum</code></td><td>список</td><td><code>options: dwindle, master</code></td></tr>
   <tr><td><code>color</code></td><td>пипетка + прозрачность</td><td>rgba(), rgb(), 0xAARRGGBB, #hex</td></tr>
   <tr><td><code>keybind</code></td><td>модификаторы + захват клавиши</td><td>конфликты ищутся во всех файлах</td></tr>
+  <tr><td><code>font</code></td><td>выбор шрифта из установленных</td><td>—</td></tr>
+  <tr><td><code>file</code> / <code>image</code> / <code>dir</code></td><td>поле + «Выбрать…»</td><td>окно выбора файлов KDE</td></tr>
+  <tr><td><code>block</code></td><td>переключатель целого блока <code>{…}</code> под строкой</td><td>выключено = блок закомментирован; модули fastfetch, waybar</td></tr>
   <tr><td><code>string</code></td><td>поле ввода</td><td>—</td></tr></table>
   <h3>С чего начинать разбор</h3>
   <p><b>Весь файл</b> — по умолчанию. <b>После маркера</b>, например <code>${t}cfgui:start</code> — всё выше игнорируется. <b>Между маркерами</b> — редактор живёт только внутри блока. Правило действует в каждом файле конфига. Настраивается кнопкой ⚙.</p>
