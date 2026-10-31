@@ -99,9 +99,17 @@ if [[ $DO_PKGS -eq 1 ]]; then
     fi
     mapfile -t AUR < <(read_list "$DOTS/packages/aur.txt")
     for p in "${AUR[@]}"; do
+        extra=()
+        # тема SDDM, поставленная когда-то вручную (её setup.sh), лежит в /usr/share без пакета —
+        # pacman упирается в «существует в файловой системе»; разрешаем перезаписать только такие файлы
+        sddm_main=/usr/share/sddm/themes/sddm-astronaut-theme/Main.qml
+        if [[ $p == sddm-astronaut-theme && -e $sddm_main ]] && ! pacman -Qo "$sddm_main" >/dev/null 2>&1; then
+            extra=(--overwrite '/usr/share/sddm/themes/sddm-astronaut-theme/*' --overwrite '/usr/share/fonts/*')
+            echo "  тема SDDM стоит вручную, без пакета — ставлю пакет поверх неё"
+        fi
         # AUR иногда не отвечает — до трёх попыток с паузой
         for try in 1 2 3; do
-            if yay -S --needed --noconfirm --answerclean None --answerdiff None "$p"; then break; fi
+            if yay -S --needed --noconfirm --answerclean None --answerdiff None "${extra[@]}" "$p"; then break; fi
             if [[ $try -lt 3 ]]; then echo "  AUR: попытка $try не удалась, жду 30 с…"; sleep 30
             else warn "AUR: не установился $p — повтори позже: yay -S $p"; fi
         done
