@@ -175,6 +175,13 @@ input[type=color]{width:34px;height:28px;border:1px solid var(--border);border-r
 .term{background:var(--bg);border:1px solid var(--border);border-radius:8px;font-family:var(--mono);font-size:12px;padding:8px 10px;max-height:240px;overflow:auto;margin-top:12px;white-space:pre-wrap;color:var(--muted)}
 .term:empty{display:none}
 .term .ok{color:var(--ok)}.term .err{color:var(--danger)}.term .c{color:var(--text)}
+.wps{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px;margin-bottom:12px}
+.wp{position:relative;aspect-ratio:16/9;border-radius:9px;overflow:hidden;border:2px solid var(--border);cursor:pointer;background:var(--bg);padding:0}
+.wp img{width:100%;height:100%;object-fit:cover;display:block}
+.wp:hover{border-color:var(--surf2)}
+.wp.cur{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
+.wp span{position:absolute;left:0;right:0;bottom:0;padding:3px 7px;font-size:10.5px;font-family:var(--mono);color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.75));text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.wp .badge2{position:absolute;top:6px;right:6px;font-size:10px;padding:1px 6px;border-radius:5px;background:var(--accent);color:var(--onaccent)}
 .pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:3px 9px;border-radius:20px;background:var(--bg);border:1px solid var(--border)}
 .pill i{width:7px;height:7px;border-radius:50%;background:var(--dim)}
 .pill.on i{background:var(--ok)}.pill.off i{background:var(--danger)}
@@ -1165,7 +1172,7 @@ const BRIDGE=(()=>{
   window.__morsEvent=ev=>onBridgeEvent(ev);
   return {call:(cmd,args={})=>new Promise((res,rej)=>{const id=++n;wait[id]={res,rej};h.postMessage(JSON.stringify({id,cmd,args}));})};
 })();
-const SYS={dots:'',repo:null,gear:null,busy:'',term:[],needInstall:false};
+const SYS={dots:'',repo:null,gear:null,busy:'',term:[],needInstall:false,wp:null};
 const hpCfg=()=>configs.find(c=>c.hp);
 function hpLoadText(text,path){const c=hpCfg(),d=c.files[0];if(path)d.path=path;
   const dirty=d.text!==d.saved;d.saved=text;if(!dirty)d.text=text;
@@ -1185,7 +1192,7 @@ async function bootBridge(){
   }catch(e){toast('Оболочка не ответила: '+e.message,true);}
 }
 function onBridgeEvent(ev){
-  if(ev.type==='theme'&&RICE.themes[ev.name]&&ev.name!==riceCurrent)applyTheme(ev.name,true);
+  if(ev.type==='theme'&&RICE.themes[ev.name]&&ev.name!==riceCurrent){applyTheme(ev.name,true);loadWallpapers();}
   if(ev.type==='hyprpanel'){const dirty=hpLoadText(ev.text);if(ev.external)setTimeout(()=>toast(dirty?'config.json HyprPanel изменился на диске — твои несохранённые правки не тронуты':'config.json HyprPanel обновлён с диска'),900);}
   if(ev.type==='open'&&ev.page==='system')openSystem();
   if(ev.type==='log'){termAdd(ev.text,ev.kind);}
@@ -1208,7 +1215,7 @@ function applyZoom(z,persist=true){z=Math.max(60,Math.min(200,Math.round(z)));zo
 
 /* ---------- страница «Система» ---------- */
 function openSystem(){if(state.capturing)stopCapture();state.view='system';$('#content').hidden=true;$('#sysview').hidden=false;renderSidebar();renderTop();renderSystem();
-  if(BRIDGE)BRIDGE.call('state').then(st=>{SYS.repo=st.repo;SYS.gear=st.gear;renderSystem();}).catch(()=>{});}
+  if(BRIDGE){BRIDGE.call('state').then(st=>{SYS.repo=st.repo;SYS.gear=st.gear;renderSystem();}).catch(()=>{});loadWallpapers();}}
 function closeSystem(){state.view='cfg';$('#sysview').hidden=true;$('#content').hidden=false;}
 function termAdd(text,kind){SYS.term.push({text,kind});if(SYS.term.length>400)SYS.term.splice(0,SYS.term.length-400);
   const el=document.getElementById('term');if(el){el.insertAdjacentHTML('beforeend',termLine(SYS.term[SYS.term.length-1]));el.scrollTop=el.scrollHeight;}}
@@ -1224,6 +1231,9 @@ function renderSystem(){
     <section class="card"><h2>Тема системы</h2>
       <div class="sub">Применяется ко всему райсу сразу — Hyprland, HyprPanel, kitty, rofi, GTK/Qt, fish, обои, экран входа. То же, что <code>rice.py apply</code> и <kbd>Super</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd>.${demo?' <b>В браузере — имитация.</b>':''}</div>
       <div class="themes">${themes}</div></section>
+    <section class="card"><h2>Обои${SYS.wp&&SYS.wp.theme?' — '+esc((RICE.themes[SYS.wp.theme]||{}).name||SYS.wp.theme):''}</h2>
+      <div class="sub">У каждой темы своя папка <code>~/.config/rice/wallpapers/&lt;тема&gt;/</code> — всё, что туда положишь (png, jpg, webp, gif), появится здесь само. Для новой темы папка создаётся автоматически.</div>
+      ${wallpapersHTML()}</section>
     <section class="card"><h2>Масштаб интерфейса</h2>
       <div class="sub">Размер всего в окне настроек. Применяется сразу. <kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>Ctrl</kbd>+<kbd>−</kbd> / <kbd>Ctrl</kbd>+<kbd>0</kbd>.</div>
       <div class="seg" id="zoomSeg"></div></section>
@@ -1241,6 +1251,10 @@ function renderSystem(){
         <button class="btn small" id="hpOrig">Открыть оригинальное окно HyprPanel</button></div></section>
   </div>`;
   renderSystemZoom();
+  el.querySelectorAll('[data-wp]').forEach(b=>b.onclick=async()=>{const rel=b.dataset.wp;termAdd('$ rice.py set-wallpaper '+rel,'c');
+    try{await BRIDGE.call('setWallpaper',{rel});SYS.wp.current=rel;renderSystem();termAdd('✓ обои: '+rel,'ok');}catch(e){termAdd('✗ '+e.message,'err');}});
+  const wo=$('#wpOpen');if(wo)wo.onclick=()=>BRIDGE.call('openWallpaperFolder');
+  const wr=$('#wpReload');if(wr)wr.onclick=loadWallpapers;
   el.querySelectorAll('[data-theme]').forEach(b=>b.onclick=()=>setSystemTheme(b.dataset.theme));
   $('#updBtn').onclick=updateRice;
   const ib=$('#instBtn');if(ib)ib.onclick=()=>BRIDGE.call('runInstaller').then(()=>toast('Установщик открыт в kitty')).catch(e=>toast(e.message,true));
@@ -1249,6 +1263,14 @@ function renderSystem(){
   el.querySelectorAll('[data-copy]').forEach(b=>b.onclick=()=>{const t=b.previousElementSibling.textContent;try{navigator.clipboard.writeText(t);toast('Команда скопирована');}catch(e){toast(t);}});
   const term=$('#term');if(term)term.scrollTop=term.scrollHeight;
 }
+function wallpapersHTML(){
+  if(!BRIDGE)return `<div class="cmdline"><code>~/.config/rice/rice.py wallpapers   # что нашлось у текущей темы</code></div><div class="note">В браузере файлы недоступны — в окне программы здесь будут превью, клик ставит обои.</div>`;
+  const w=SYS.wp;if(!w)return '<div class="note">Загружаю…</div>';
+  const items=w.files.map(f=>`<button class="wp ${f.rel===w.current?'cur':''}" data-wp="${esc(f.rel)}" title="${esc(f.rel)}"><img loading="lazy" src="${esc(f.uri)}" alt="">${f.rel===w.current?'<i class="badge2">сейчас</i>':''}<span>${esc(f.default?'сгенерированные':f.rel)}</span></button>`).join('');
+  return `${w.files.length?`<div class="wps">${items}</div>`:'<div class="empty">Папка пуста — положи сюда картинки</div>'}
+    ${w.leftovers&&w.leftovers.length?`<div class="note">В <code>wallpapers/local/</code> остались картинки без темы: ${w.leftovers.map(esc).join(', ')} — перенеси их в папку нужной темы.</div>`:''}
+    <div class="actions"><button class="btn" id="wpOpen">📁 Открыть папку темы</button><button class="btn" id="wpReload">⟳ Обновить список</button><span class="note">${esc(w.dir||'')}</span></div>`;}
+async function loadWallpapers(){if(!BRIDGE)return;try{SYS.wp=await BRIDGE.call('wallpapers');}catch(e){SYS.wp={files:[],dir:'',error:e.message};}if(state.view==='system')renderSystem();}
 function renderSystemZoom(){const el=$('#zoomSeg');if(!el)return;
   el.innerHTML=ZOOMS.map(z=>`<button class="${z===zoom?'on':''}" data-z="${z}">${z}%</button>`).join('')+`<input type="range" min="60" max="200" step="5" value="${zoom}" id="zoomR"><span class="zv">${zoom}%</span>`;
   el.querySelectorAll('[data-z]').forEach(b=>b.onclick=()=>applyZoom(+b.dataset.z));
@@ -1257,7 +1279,7 @@ async function setSystemTheme(k){if(k===riceCurrent||SYS.busy)return;
   if(!BRIDGE){termAdd(`$ rice.py apply ${k}`,'c');applyTheme(k,true);termAdd(`✓ тема ${RICE.themes[k].name} (имитация)`,'ok');return;}
   SYS.busy='theme:'+k;renderSystem();termAdd(`$ rice.py apply ${k}`,'c');
   try{const r=await BRIDGE.call('applyTheme',{name:k});termAdd(r.ok?`✓ тема ${RICE.themes[k].name} применена`:`✗ rice.py завершился с ошибкой (${r.code})`,r.ok?'ok':'err');
-    if(r.ok&&k!==riceCurrent)applyTheme(k,true);}
+    if(r.ok&&k!==riceCurrent)applyTheme(k,true);loadWallpapers();}
   catch(e){termAdd('✗ '+e.message,'err');}
   SYS.busy='';renderSystem();}
 async function updateRice(){if(SYS.busy)return;

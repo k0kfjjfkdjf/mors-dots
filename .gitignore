@@ -10,8 +10,10 @@ rice/wallpaper-index.json
 config/hypr/lua/host.lua
 
 # личное, не для публичного репо
-rice/wallpapers/local/*
-!rice/wallpapers/local/.gitkeep
+# личные обои: в git только сгенерированные default.png каждой темы
+rice/wallpapers/*/*
+!rice/wallpapers/*/default.png
+rice/wallpapers/local/
 config/fastfetch/images/
 config/fish/fish_variables
 

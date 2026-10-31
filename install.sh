@@ -159,7 +159,13 @@ if [[ -d "$BACKUP/.config" ]]; then
     if [[ -d "$B/rice" ]]; then   # старая установка rice: личные обои, текущая тема
         for f in "$B/rice/wallpapers/"*.png; do
             [[ -e "$f" ]] || continue
-            n="$(basename "$f")"; [[ -e "$DOTS/rice/wallpapers/$n" ]] || cp --update=none "$f" "$DOTS/rice/wallpapers/local/$n"
+            n="$(basename "$f")"; mkdir -p "$DOTS/rice/wallpapers/local"
+            [[ -e "$DOTS/rice/wallpapers/$n" ]] || cp --update=none "$f" "$DOTS/rice/wallpapers/local/$n"
+        done
+        # новая раскладка: папки тем wallpapers/<тема>/*
+        for d in "$B/rice/wallpapers/"*/; do
+            [[ -d "$d" ]] || continue; t="$(basename "$d")"; mkdir -p "$DOTS/rice/wallpapers/$t"
+            cp -r --update=none "$d". "$DOTS/rice/wallpapers/$t/" 2>/dev/null || true
         done
         cp --update=none "$B/rice/current" "$B/rice/wallpaper-index.json" "$DOTS/rice/" 2>/dev/null || true
         ok "личные обои и выбор темы перенесены из прошлой установки"
@@ -239,7 +245,7 @@ echo
 echo "${c_hd}Готово.${c_0}"
 [[ -d "$BACKUP" ]] && echo "  Бэкап заменённого: ${BACKUP/#$HOME/~}"
 echo "  SUPER+SHIFT+T — меню тем · SUPER+SHIFT+W — следующие обои · SUPER+Q — терминал"
-echo "  Личные обои: положи png в ~/.config/rice/wallpapers/local/ (имена — в rice/themes/*.json)"
+echo "  Личные обои: положи картинки в ~/.config/rice/wallpapers/<тема>/ — подхватятся сами"
 if [[ ${#WARNINGS[@]} -gt 0 ]]; then
     echo; echo "${c_warn}Предупреждения:${c_0}"; printf '  - %s\n' "${WARNINGS[@]}"
 fi

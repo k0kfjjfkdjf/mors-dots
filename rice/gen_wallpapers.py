@@ -17,7 +17,8 @@ def grain(img, amt):
 
 def save(img, name):
     img = np.clip(img, 0, 1) ** (1 / 1.0)
-    Image.fromarray((img * 255).astype(np.uint8)).save(f"wallpapers/{name}.png", optimize=True)
+    import os; os.makedirs(f"wallpapers/{name}", exist_ok=True)
+    Image.fromarray((img * 255).astype(np.uint8)).save(f"wallpapers/{name}/default.png", optimize=True)
 
 def vgrad(top, bottom):
     t = Y[..., None]

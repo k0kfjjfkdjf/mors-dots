@@ -59,11 +59,5 @@
   ],
   "border_inactive": "#2e2e2eaa",
   "border_angle": 45,
-  "border_loop": false,
-  "wallpaper": "mono.png",
-  "wallpapers": [
-    "local/mono-eyes.png",
-    "local/mono-moon.png",
-    "mono.png"
-  ]
+  "border_loop": false
 }

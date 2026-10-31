@@ -6,6 +6,13 @@
     rice.py apply <тема>      — применить тему ко всей системе
     rice.py wallpaper         — заново поставить обои текущей темы (для автозапуска)
     rice.py next|prev|random  — следующие / предыдущие / случайные обои в текущей теме
+    rice.py wallpapers [тема] — какие обои нашлись у темы (и где её папка)
+    rice.py set-wallpaper <файл> — поставить конкретные обои текущей темы
+
+Обои: у каждой темы своя папка wallpapers/<тема>/ — всё, что там лежит (png, jpg, webp,
+gif…, в том числе в подпапках), подхватывается само; прописывать пути не нужно.
+Сгенерированные обои темы — default.png, идут последними. Папка для новой темы
+создаётся автоматически. Личные картинки в git не попадают.
 
 Одна тема = один файл themes/<имя>.json (27 цветов в слотах Catppuccin + акценты).
 Из него генерируются конфиги: Hyprland, HyprPanel, Kitty, Rofi, Qt/KDE (Dolphin),
@@ -68,12 +75,8 @@ class Theme:
         self.secondary = self.p.get(acc["secondary"], acc["secondary"])
         self.tertiary = self.p.get(acc["tertiary"], acc["tertiary"])
         self.ansi = self.raw["ansi"]
-        wp = self.raw.get("wallpapers") or [self.raw["wallpaper"]]
-        # local/* — личные картинки (не в git); если их нет на машине — пропускаем
-        self.wallpapers = [RICE_DIR / "wallpapers" / w for w in wp if (RICE_DIR / "wallpapers" / w).exists()]
-        if not self.wallpapers:
-            self.wallpapers = [RICE_DIR / "wallpapers" / f"{name}.png"]
-        self.wallpaper = self.wallpapers[wp_index(name) % len(self.wallpapers)]
+        self.wallpapers = theme_wallpapers(name)
+        self.wallpaper = selected_wallpaper(name, self.wallpapers)   # None, если папка пуста
 
     def __getattr__(self, k):
         try:
@@ -116,20 +119,74 @@ class Theme:
         return cols
 
 
+# ---------------------------------------------------------------- поиск обоев
+WP_DIR = RICE_DIR / "wallpapers"
 WP_STATE = RICE_DIR / "wallpaper-index.json"
+WP_DEFAULT = "default.png"                     # сгенерированные обои темы (gen_wallpapers.py)
+WP_EXT = {".png", ".jpg", ".jpeg", ".webp", ".gif", ".bmp", ".tif", ".tiff"}
 
 
-def wp_index(theme, value=None):
-    """Какие обои выбраны в каждой теме (запоминается отдельно для каждой)."""
+def _natural(p):
+    import re
+    return [int(x) if x.isdigit() else x.lower() for x in re.split(r"(\d+)", str(p))]
+
+
+def migrate_wallpapers():
+    """Старая раскладка → папки тем. Безопасно запускать сколько угодно раз.
+    wallpapers/<тема>.png → wallpapers/<тема>/default.png;
+    wallpapers/local/<тема>-что-угодно.* → wallpapers/<тема>/."""
+    themes = list_themes()
+    for t in themes:
+        (WP_DIR / t).mkdir(parents=True, exist_ok=True)
+        old = WP_DIR / f"{t}.png"
+        if old.is_file() and not (WP_DIR / t / WP_DEFAULT).exists():
+            old.replace(WP_DIR / t / WP_DEFAULT)
+    local = WP_DIR / "local"
+    if local.is_dir():
+        for f in local.iterdir():
+            if not f.is_file() or f.suffix.lower() not in WP_EXT:
+                continue
+            owner = next((t for t in themes if f.name.lower().startswith((t + "-", t + "_", t + "."))), None)
+            if owner and not (WP_DIR / owner / f.name).exists():
+                f.replace(WP_DIR / owner / f.name)
+
+
+def theme_wallpapers(name):
+    """Все картинки из папки темы: свои — по имени, default.png — в конце."""
+    migrate_wallpapers()
+    d = WP_DIR / name
+    d.mkdir(parents=True, exist_ok=True)
+    files = [f for f in d.rglob("*")
+             if f.is_file() and f.suffix.lower() in WP_EXT
+             and not any(part.startswith(".") for part in f.relative_to(d).parts)]
+    own = sorted((f for f in files if f.name != WP_DEFAULT), key=lambda f: _natural(f.relative_to(d)))
+    return own + [f for f in files if f.name == WP_DEFAULT]
+
+
+def _wp_state():
     try:
-        d = json.loads(WP_STATE.read_text())
+        return json.loads(WP_STATE.read_text())
     except Exception:
-        d = {}
-    if value is None:
-        return int(d.get(theme, 0))
-    d[theme] = value
-    write(WP_STATE, json.dumps(d))
-    return value
+        return {}
+
+
+def selected_wallpaper(theme, files):
+    """Какие обои выбраны в теме — запоминается имя файла, отдельно для каждой темы."""
+    if not files:
+        return None
+    v = _wp_state().get(theme, 0)
+    if isinstance(v, str):
+        for f in files:
+            if str(f.relative_to(WP_DIR / theme)) == v:
+                return f
+        v = 0
+    return files[int(v) % len(files)]
+
+
+def select_wallpaper(theme, f):
+    d = _wp_state()
+    d[theme] = str(Path(f).relative_to(WP_DIR / theme))
+    write(WP_STATE, json.dumps(d, ensure_ascii=False))
 
 
 def list_themes():
@@ -218,7 +275,7 @@ def apply_hyprpanel(t):
     cfg["theme.matugen"] = False
     # обоями занимается rice (awww/swww) — иначе HyprPanel перебьёт их при старте
     cfg["wallpaper.enable"] = False
-    cfg["wallpaper.image"] = str(t.wallpaper)
+    cfg["wallpaper.image"] = str(t.wallpaper or "")
     write(path, json.dumps(cfg, ensure_ascii=False, indent=2))
     # HyprPanel сам перечитывает config.json при изменении
 
@@ -477,6 +534,8 @@ def wallpaper_tool():
 
 
 def apply_wallpaper(t, transition="fade"):
+    if not t.wallpaper:
+        return f"нет картинок — положи их в {WP_DIR / t.id}"
     tool = wallpaper_tool()
     if not tool or DRY:
         return
@@ -501,6 +560,8 @@ def apply_sddm(t):
     """Пишет переопределение темы sddm-astronaut в /var/lib/rice (один раз настраивается sddm-setup.sh)."""
     if not (SDDM_DIR.is_dir() and os.access(SDDM_DIR, os.W_OK)):
         return "пропущено (запусти sddm-setup.sh один раз)"
+    if not t.wallpaper:
+        return "нет обоев у темы"
     p, P = t.p, t.primary
     conf = {
         "Background": "Backgrounds/rice.png", "DimBackground": "0.0",
@@ -569,7 +630,10 @@ def main(argv):
             return 1
         t = Theme(name)
         n = len(t.wallpapers)
-        i = wp_index(name)
+        if not n:
+            print(f"У темы нет обоев — положи картинки в {WP_DIR / name}")
+            return 1
+        i = t.wallpapers.index(t.wallpaper)
         if cmd == "next":
             i = (i + 1) % n
         elif cmd == "prev":
@@ -577,11 +641,39 @@ def main(argv):
         else:
             import random
             i = random.choice([k for k in range(n) if k != i] or [0])
-        wp_index(name, i)
+        select_wallpaper(name, t.wallpapers[i])
         t = Theme(name)
         apply_wallpaper(t)
         apply_sddm(t)
         print(f"{t.raw['name']}: обои {i + 1}/{n} — {t.wallpaper.name}")
+    elif cmd == "wallpapers":
+        name = argv[2] if len(argv) > 2 else current()
+        if not name:
+            return 1
+        t = Theme(name)
+        print(f"{t.raw['name']}: {WP_DIR / name}")
+        for f in t.wallpapers:
+            print(f"{'*' if f == t.wallpaper else ' '} {f.relative_to(WP_DIR / name)}")
+        if not t.wallpapers:
+            print("  (пусто — положи сюда картинки)")
+        left = [f.name for f in (WP_DIR / "local").glob("*") if f.suffix.lower() in WP_EXT] if (WP_DIR / "local").is_dir() else []
+        if left:
+            print(f"В {WP_DIR / 'local'} остались картинки без темы: {', '.join(left)} — перенеси их в папку нужной темы")
+    elif cmd == "set-wallpaper" and len(argv) > 2:
+        name = current()
+        if not name:
+            return 1
+        t = Theme(name)
+        want = argv[2]
+        f = next((f for f in t.wallpapers if want in (str(f), f.name, str(f.relative_to(WP_DIR / name)))), None)
+        if not f:
+            print(f"Нет такой картинки у темы {name}: {want}")
+            return 1
+        select_wallpaper(name, f)
+        t = Theme(name)
+        apply_wallpaper(t)
+        apply_sddm(t)
+        print(f"{t.raw['name']}: {f.name}")
     elif cmd == "wallpaper":
         if current():
             apply_wallpaper(Theme(current()), transition="none")  # при входе — без анимации

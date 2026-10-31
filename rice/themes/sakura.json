@@ -59,11 +59,5 @@
   ],
   "border_inactive": "#3a2d38aa",
   "border_angle": 45,
-  "border_loop": false,
-  "wallpaper": "sakura.png",
-  "wallpapers": [
-    "local/sakura-lineart.png",
-    "local/sakura-dusk.png",
-    "sakura.png"
-  ]
+  "border_loop": false
 }

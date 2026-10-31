@@ -60,11 +60,5 @@
   ],
   "border_inactive": "#222b52aa",
   "border_angle": 45,
-  "border_loop": true,
-  "wallpaper": "aurora.png",
-  "wallpapers": [
-    "local/aurora-arch.png",
-    "local/aurora-rei.png",
-    "aurora.png"
-  ]
+  "border_loop": true
 }
