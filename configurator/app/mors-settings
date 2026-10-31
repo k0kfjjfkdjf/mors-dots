@@ -74,8 +74,8 @@ class Backend:
 
     def gear_running(self):
         try:
-            os.kill(int((CACHE_DIR / 'gear-redirect.pid').read_text()), 0)
-            return True
+            pid = int((CACHE_DIR / 'gear-redirect.pid').read_text())
+            return b'gear-redirect' in pathlib.Path(f'/proc/{pid}/cmdline').read_bytes()
         except (OSError, ValueError):
             return False
 

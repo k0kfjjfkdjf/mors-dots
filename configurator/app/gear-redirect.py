@@ -73,12 +73,28 @@ PIDFILE = BYPASS.parent / 'gear-redirect.pid'
 def main():
     ensure_session_env()
     PIDFILE.parent.mkdir(parents=True, exist_ok=True)
-    try:                                         # второй экземпляр не нужен
-        os.kill(int(PIDFILE.read_text()), 0)
+    if running_pid():                            # второй экземпляр не нужен
         sys.exit(0)
-    except (OSError, ValueError):
-        pass
     PIDFILE.write_text(str(os.getpid()))
+    try:
+        listen()
+    finally:                                     # Hyprland завершился — убираем за собой
+        if running_pid() in (None, os.getpid()):
+            PIDFILE.unlink(missing_ok=True)
+
+
+def running_pid():
+    """PID живого gear-redirect из файла. После перезагрузки номер мог достаться
+    другому процессу — поэтому проверяем не только что процесс жив, но и что это мы."""
+    try:
+        pid = int(PIDFILE.read_text())
+        cmd = pathlib.Path(f'/proc/{pid}/cmdline').read_bytes()
+    except (OSError, ValueError):
+        return None
+    return pid if b'gear-redirect' in cmd else None
+
+
+def listen():
     s = socket.socket(socket.AF_UNIX, socket.SOCK_STREAM)
     s.connect(socket_path())
     buf = b''

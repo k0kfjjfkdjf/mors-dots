@@ -101,7 +101,7 @@ if [[ -x "$DOTS/configurator/app/mors-settings" ]]; then
         pacman -Q "$p" >/dev/null 2>&1 && ok "пакет $p" || bad "нет пакета $p: sudo pacman -S --needed $p"
     done
     pid="$(cat "${XDG_CACHE_HOME:-$HOME/.cache}/mors-settings/gear-redirect.pid" 2>/dev/null)"
-    [[ -n "$pid" ]] && kill -0 "$pid" 2>/dev/null && ok "шестерёнка HyprPanel → mors-settings работает" \
+    [[ -n "$pid" ]] && grep -qa gear-redirect "/proc/$pid/cmdline" 2>/dev/null && ok "шестерёнка HyprPanel → mors-settings работает" \
         || warn "перехват шестерёнки не запущен: python3 $DOTS/configurator/app/gear-redirect.py & disown (дальше — сам при входе)"
     [[ -f "$DOTS/configurator/prototype/configurator.html" ]] && ok "интерфейс собран" || bad "нет configurator.html — python $DOTS/configurator/tools/build.py"
 else
