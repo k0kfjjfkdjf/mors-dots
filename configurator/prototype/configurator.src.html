@@ -390,7 +390,7 @@ input::placeholder,textarea::placeholder{color:var(--dim)}
 <body>
 <div class="app">
   <aside>
-    <div class="brand"><div class="logo">#@</div><div><b>Конфигуратор</b><small>прототип интерфейса</small></div></div>
+    <div class="brand"><div class="logo">#@</div><div><b>Конфигуратор</b><small id="brandSub">прототип интерфейса</small></div></div>
     <button class="sysbtn" id="sysBtn"><span class="ic">⚙</span><span>Система<small>тема · масштаб · обновление</small></span></button>
     <div class="navlabel">Конфиги</div>
     <div id="cfglist"></div>
@@ -448,6 +448,7 @@ input::placeholder,textarea::placeholder{color:var(--dim)}
             <div class="field"><label>Метка разметки</label><input type="text" id="mMarker"></div>
           </div>
         </div>
+        <div class="field"><label>Команда, чтобы программа перечитала конфиг (необязательно)</label><input type="text" id="mReload" placeholder="например: pkill -USR1 -x kitty  ·  makoctl reload  ·  swaync-client -R"></div>
         <label class="choice" id="mFollowWrap"><input type="checkbox" id="mFollow" checked><div><b>Подтягивать подключённые файлы</b><small>Файлы из строк <code>source = …</code> становятся разделами этого конфига</small></div></label>
         <div class="flabel" style="margin:10px 0 6px">С чего начинать разбор (в каждом файле)</div>
         <label class="choice"><input type="radio" name="mStart" value="all"><div><b>Весь файл</b><small>Разметка ищется везде</small></div></label>
@@ -822,7 +823,7 @@ function livePreview(it,v){if(!state.live||!cur.live||!it)return;
 function renderLog(){const el=$('#log');let h='<div class="hd">Журнал применения</div>';
   if(!cur.live)h+=`<div class="note">${esc(cur.liveNote||'Живой предпросмотр для этого конфига недоступен')}</div>`;
   else if(!state.live)h+='<div class="note">Предпросмотр выключен — изменения применятся только после сохранения</div>';
-  else if(!state.log.length)h+='<div class="note">Двигай настройки — здесь появятся команды, которые программа отправит в Hyprland</div>';
+  else if(!state.log.length)h+=`<div class="note">${cur.real?`Двигай настройки — значение сразу запишется в файл${cur.reload||cur.id==='hyprland'?', и '+esc(cur.name)+' его перечитает':''}`:'Двигай настройки — здесь появятся команды, которые программа отправит в Hyprland'}</div>`;
   h+=state.log.map(l=>`<div><span class="ts">${l.ts}</span> ${l.cmd?`<span class="c">$ ${esc(l.cmd)}</span>`:''}${l.note?` <span class="note"># ${esc(l.note)}</span>`:''}</div>`).join('');
   el.innerHTML=h;el.scrollTop=el.scrollHeight;}
 
@@ -851,7 +852,7 @@ function focusFile(fi){
   const g=document.getElementById('fg-'+fi);if(g){g.scrollIntoView({block:'start',behavior:'smooth'});g.classList.add('pulse');setTimeout(()=>g.classList.remove('pulse'),900);}
 }
 function renderTop(){
-  $('#modeBadge').textContent=BRIDGE?'':'прототип в браузере';$('#modeBadge').style.display=BRIDGE?'none':'';
+  $('#modeBadge').textContent=BRIDGE?'':'прототип в браузере';$('#brandSub').textContent=BRIDGE?'настройки райса':'прототип интерфейса';if(BRIDGE)document.title='Настройки';$('#modeBadge').style.display=BRIDGE?'none':'';
   $$('#status,#liveWrap,#undoBtn,#revertBtn,#saveBtn').forEach(e=>e.style.display=state.view==='system'?'none':'');
   if(state.view==='system'){$('#tName').textContent='Система';$('#tPath').textContent=BRIDGE?SYS.dots||'':'тема · масштаб · обновление райса';return;}
   $('#tName').textContent=cur.name;
@@ -869,7 +870,7 @@ function startLabel(){const s=cur.start;
   return 'весь файл';}
 function bannerHTML(){
   if(cur.mode==='adapter')return `<div class="banner adapter"><span>🔌 <b>Адаптер.</b> Файл ${esc(cur.name)} не меняется по структуре — русские названия и разделы берутся из нашей схемы <code>adapters/${esc(cur.schemaFile)}</code>.</span></div>`;
-  return `<div class="banner"><span><b>Разметка</b> <code>${esc(cur.comment+cur.marker)}</code> · разбор: ${startLabel()}${cur.files.length>1?` · файлов: ${cur.files.length}`:''}${cur.follow?' · подключения подтягиваются':''}</span><span class="spacer"></span><button class="btn small" id="cfgSettings">⚙ Настроить</button></div>`;
+  return `${cur.missing?`<div class="empty err">Файл <code>${esc(cur.files[0].path)}</code> не найден${cur.error?': '+esc(cur.error):''}.</div>`:''}<div class="banner"><span><b>Разметка</b> <code>${esc(cur.comment+cur.marker)}</code> · разбор: ${startLabel()}${cur.files.length>1?` · файлов: ${cur.files.length}`:''}${cur.follow?' · подключения подтягиваются':''}${cur.real&&cur.reload?` · после записи: <code>${esc(cur.reload)}</code>`:''}</span><span class="spacer"></span>${cur.user?'<button class="btn small" id="cfgRemove" title="Файл не удаляется — только пропадает из списка">Убрать из списка</button>':''}<button class="btn small" id="cfgSettings">⚙ Настроить</button></div>`;
 }
 function sectionsHTML(pf,f){
   const groups=new Map();
@@ -1019,6 +1020,8 @@ function bindForm(){
     state.collapsed.has(k)?state.collapsed.delete(k):state.collapsed.add(k);el.parentElement.classList.toggle('collapsed');});
   body.querySelectorAll('[data-raw]').forEach(el=>el.onclick=()=>{state.file=+el.dataset.raw;state.tab='raw';renderTabs();renderChips();renderPane();renderSidebar();});
   const g=$('#cfgSettings');if(g)g.onclick=()=>openModal(true);
+  const rm=$('#cfgRemove');if(rm)rm.onclick=async()=>{const c=cur;try{await BRIDGE.call('removeConfig',{id:c.id});}catch(e){toast(e.message,true);return;}
+    configs.splice(configs.indexOf(c),1);selectConfig(configs[0]);toast(`«${c.name}» убран из списка (файл не тронут)`);};
   const a=$('#formAddFile');if(a)a.onclick=openFileModal;
 }
 function stopCapture(){const c=state.capturing;if(!c)return;state.capturing=null;c.el.classList.remove('capturing');
@@ -1139,7 +1142,9 @@ function openModal(edit){
   $('#mBegin2').value=c.start.mode==='between'?c.start.begin:tag+'cfgui:begin';
   $('#mEnd').value=c.start.end||tag+'cfgui:end';
   document.querySelector(`input[name=mStart][value=${c.start.mode}]`).checked=true;
-  $('#mNote').style.display=edit?'none':'';$('#mErr').textContent='';
+  $('#mNote').style.display=edit?'none':'';$('#mErr').textContent='';$('#mReload').value=edit?(cur.reload||''):'';
+  $('#mPath').disabled=!!(edit&&cur.real);
+  $('#mNote').textContent=BRIDGE?'Файл должен существовать (в ~/.config, ~/.local/share или mors-dots). Программа запомнит его в списке.':'В прототипе новый файл заполняется примером. В программе здесь будет чтение реального файла.';
   updModal();$('#modalBg').classList.add('open');setTimeout(()=>$('#mName').focus(),50);
 }
 function updModal(){
@@ -1178,7 +1183,13 @@ $('#mOk').onclick=()=>{
   const start={mode:sm,begin:sm==='marker'?$('#mBegin').value.trim():sm==='between'?$('#mBegin2').value.trim():'',end:sm==='between'?$('#mEnd').value.trim():''};
   if((sm!=='all'&&!start.begin)||(sm==='between'&&!start.end)){$('#mErr').textContent='Заполни маркеры';return;}
   const follow=$('#mFollow').checked;
-  if(modalEdit){Object.assign(cur,{name,format:$('#mFormat').value,comment,marker,start,follow});cur.files[0].path=path;closeModals();state.parsed=parseCur();renderAll();toast('Настройки разбора обновлены');return;}
+  const reload=($('#mReload')&&$('#mReload').value.trim())||'';
+  if(modalEdit){Object.assign(cur,{name,format:$('#mFormat').value,comment,marker,start,follow,reload});if(!cur.real)cur.files[0].path=path;
+    if(cur.real&&BRIDGE)BRIDGE.call('updateConfig',{id:cur.id,name,format:cur.format,comment,marker,start,follow,reload}).catch(e=>toast(e.message,true));
+    closeModals();state.parsed=parseCur();renderAll();toast('Настройки разбора обновлены');return;}
+  if(BRIDGE){BRIDGE.call('addConfig',{cfg:{name,path,format:$('#mFormat').value,comment,marker,start,follow,reload}})
+      .then(r=>{const c=realConfig(r);configs.push(c);closeModals();selectConfig(c);toast(c.files.some(d=>d.text.includes(comment+marker))?'Конфиг добавлен':'Конфиг добавлен — разметки в нём пока нет, добавь её на вкладке «Править разметку»');})
+      .catch(e=>{$('#mErr').textContent=e.message;});return;}
   const c={name,mode:'markup',format:$('#mFormat').value,comment,marker,start,follow,live:null,liveNote:'Для этой программы команда применения не задана',history:[]};
   c.files=[doc(path,sampleText(c,'Основное'))];configs.push(c);closeModals();selectConfig(c);toast('Конфиг добавлен');
 };
@@ -1232,7 +1243,7 @@ async function bootBridge(){
     SYS.dots=st.dots;SYS.repo=st.repo;SYS.gear=st.gear;
     const c=hpCfg();c.live='file';c.liveNote='';
     if(st.hyprpanel&&st.hyprpanel.text!=null)hpLoadText(st.hyprpanel.text,st.hyprpanel.path);
-    await loadRealHyprland();
+    await loadRealConfigs();
     if(st.zoom)applyZoom(st.zoom,false);
     if(st.theme&&RICE.themes[st.theme])applyTheme(st.theme);
     if(st.open==='system')openSystem();
@@ -1249,24 +1260,27 @@ function onBridgeEvent(ev){
   if(ev.type==='log'){termAdd(ev.text,ev.kind);}
 }
 /* ---------- настоящий Hyprland (Lua) ---------- */
-async function loadRealHyprland(){
-  let r;try{r=await BRIDGE.call('hyprland');}catch(e){toast('Не прочитал конфиг Hyprland: '+e.message,true);return;}
-  if(!r||!r.files||!r.files.length)return;
-  const c=configs[0];
-  Object.assign(c,{real:true,format:r.format||'lua',comment:r.format==='conf'?'#':'--',marker:'@',follow:true,
-    start:{mode:'all',begin:'',end:''},live:'file',liveNote:'',history:[],files:r.files.map(f=>doc(f.path,f.text))});
-  c.files.forEach((d,fi)=>{if(!/--@|#@/.test(d.text))state.collapsed.add(c.name+':'+fi);});   // файлы без разметки — свёрнуты
-  if(cur===c){state.file=0;state.parsed=parseCur();}
-}
+/* настоящие конфиги: в окне программы демо-данные заменяются файлами с диска */
+function realConfig(r){const c={id:r.id,name:r.name,mode:'markup',real:true,user:!r.builtin,format:r.format||'conf',comment:r.comment||'#',marker:r.marker||'@',
+    follow:r.follow!==false,start:r.start||{mode:'all',begin:'',end:''},reload:r.reload||'',live:'file',liveNote:'',history:[],error:r.error||'',
+    files:(r.files&&r.files.length?r.files:[{path:r.path||'',text:''}]).map(f=>doc(f.path,f.text))};
+  c.files.forEach((d,fi)=>{if(c.files.length>1&&!d.text.includes(c.comment+c.marker))state.collapsed.add(c.name+':'+fi);});   // файлы без разметки — свёрнуты
+  if(r.files&&!r.files.length)c.missing=true;return c;}
+async function loadRealConfigs(){
+  let list;try{list=await BRIDGE.call('configs');}catch(e){toast('Не прочитал конфиги: '+e.message,true);return;}
+  const hp=hpCfg(),wasIdx=configs.indexOf(cur),wasName=cur&&cur.name;
+  const real=list.map(realConfig),builtin=real.filter(c=>!c.user),user=real.filter(c=>c.user);
+  configs.splice(0,configs.length,...builtin,hp,...user);
+  cur=configs.find(c=>c.name===wasName)||configs[Math.max(0,Math.min(wasIdx,configs.length-1))];
+  state.file=0;state.parsed=parseCur();}
 let realTimer=null;
-function realScheduleWrite(){clearTimeout(realTimer);realTimer=setTimeout(()=>realWriteNow(false),600);}
-async function realWriteNow(manual){clearTimeout(realTimer);const c=configs.find(x=>x.real);if(!c)return;
+function realScheduleWrite(){const c=cur;clearTimeout(realTimer);realTimer=setTimeout(()=>realWriteNow(false,c),600);}
+async function realWriteNow(manual,c=cur){clearTimeout(realTimer);if(!c||!c.real||!BRIDGE)return;
   const ch=c.files.filter(dirtyDoc);if(!ch.length)return;
-  try{let reload=null;
-    for(const d of ch){const text=d.text;const r=await BRIDGE.call('writeHypr',{path:d.path,text,reload:false});d.saved=text;
-      addLog('w:'+d.path,null,`${base(d.path)} записан${r&&r.backup?' · копия '+r.backup:''}`);}
-    reload=await BRIDGE.call('hyprReload');
-    addLog('reload','hyprctl reload',reload&&reload.ok?'Hyprland применил':'ошибка: '+(reload&&reload.out||''));
+  try{for(let i=0;i<ch.length;i++){const d=ch[i],text=d.text,last=i===ch.length-1;
+      const r=await BRIDGE.call('writeConfigFile',{id:c.id,path:d.path,text,reload:last});d.saved=text;
+      addLog('w:'+d.path,null,`${base(d.path)} записан${r&&r.backup?' · копия '+r.backup:''}`);
+      const rl=r&&r.reload;if(rl)addLog('reload:'+c.id,c.id==='hyprland'?'hyprctl reload':rl.cmd,rl.ok?`${c.name} применил`:'ошибка: '+(rl.out||''));}
     if(cur===c){markRows();renderTop();renderPane();}renderSidebar();if(manual)toast('Сохранено');}
   catch(e){toast('Не удалось записать: '+e.message,true);}}
 let hpTimer=null;

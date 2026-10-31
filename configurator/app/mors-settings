@@ -269,6 +269,125 @@ class Backend:
         code, out = run(['hyprctl', 'reload'], timeout=20)
         return {'ok': code == 0, 'out': out}
 
+    # ---------------------------------------------------------------- конфиги (настоящие файлы)
+    BUILTIN = [
+        {'id': 'hyprland', 'name': 'Hyprland', 'builtin': True},
+        {'id': 'kitty', 'name': 'Kitty', 'builtin': True, 'path': '~/.config/kitty/kitty.conf', 'format': 'space',
+         'comment': '#', 'marker': '@', 'follow': True, 'reload': 'pkill -USR1 -x kitty'},
+    ]
+    FORMAT_SRC = {   # строки подключения других файлов
+        'conf': r'^\s*source\s*=\s*(.+?)\s*$', 'space': r'^\s*include\s+(.+?)\s*$',
+        'ini': r'^\s*include\s*=\s*(.+?)\s*$', 'lua': r'^\s*(?:dofile|require)\s*\(?\s*["\']([^"\']+)["\']\s*\)?\s*$'}
+
+    def _user_configs(self):
+        return self.settings().get('configs', [])
+
+    def _allowed(self, p):
+        real = pathlib.Path(os.path.expanduser(str(p))).resolve()
+        roots = [(HOME / '.config').resolve(), DOTS.resolve(), (HOME / '.local/share').resolve()]
+        return any(real.is_relative_to(r) for r in roots)
+
+    @staticmethod
+    def _disp(p):
+        p = pathlib.Path(p)
+        return '~/' + str(p.relative_to(HOME)) if p.is_relative_to(HOME) else str(p)
+
+    def _read_tree(self, cfg):
+        """Главный файл + всё, что он подключает (рекурсивно, без повторов)."""
+        import re
+        main = pathlib.Path(os.path.expanduser(cfg['path']))
+        rx = re.compile(self.FORMAT_SRC.get(cfg.get('format', 'conf'), r'(?!)'), re.M)
+        order, seen = [], set()
+
+        def walk(path):
+            key = path.absolute()
+            if key in seen or not path.is_file():
+                return
+            seen.add(key); order.append(path)
+            if not cfg.get('follow', True):
+                return
+            for target in rx.findall(path.read_text(errors='replace')):
+                if cfg.get('format') == 'lua' and '/' not in target and not target.endswith('.lua'):
+                    nxt = main.parent / (target.replace('.', '/') + '.lua')
+                else:
+                    t = pathlib.Path(os.path.expanduser(target))
+                    nxt = t if t.is_absolute() else path.parent / t
+                if any(ch in str(nxt) for ch in '*?['):          # include с маской — все подходящие
+                    for g in sorted(nxt.parent.glob(nxt.name)):
+                        walk(g)
+                else:
+                    walk(nxt)
+        walk(main)
+        return [{'path': self._disp(p), 'text': p.read_text(errors='replace')} for p in order]
+
+    def cmd_configs(self):
+        out = []
+        for c in self.BUILTIN + self._user_configs():
+            c = dict(c)
+            try:
+                if c['id'] == 'hyprland':
+                    h = self.cmd_hyprland()
+                    c.update(format=h.get('format', 'lua'), comment='#' if h.get('format') == 'conf' else '--',
+                             marker='@', follow=True, path='~/.config/hypr/hyprland.' + h.get('format', 'lua'),
+                             files=h['files'])
+                else:
+                    c['files'] = self._read_tree(c)
+            except Exception as e:
+                c['files'], c['error'] = [], str(e)
+            out.append(c)
+        return out
+
+    def cmd_addConfig(self, cfg):
+        p = pathlib.Path(os.path.expanduser(cfg['path']))
+        if not p.is_file():
+            raise FileNotFoundError(f'нет файла {cfg["path"]}')
+        if not self._allowed(p):
+            raise PermissionError('можно добавлять файлы из ~/.config, ~/.local/share и mors-dots')
+        lst = [c for c in self._user_configs() if c['id'] != cfg.get('id')]
+        cfg = {k: cfg[k] for k in ('name', 'path', 'format', 'comment', 'marker', 'start', 'follow', 'reload') if k in cfg}
+        cfg['id'] = 'u-' + hashlib.sha1(str(p).encode()).hexdigest()[:8]
+        lst = [c for c in lst if c['id'] != cfg['id']] + [cfg]
+        self.save_settings(configs=lst)
+        return {**cfg, 'files': self._read_tree(cfg)}
+
+    def cmd_updateConfig(self, cfg):
+        if cfg.get('id') in ('hyprland', 'kitty'):
+            return True
+        lst = [dict(c, **{k: cfg[k] for k in ('name', 'format', 'comment', 'marker', 'start', 'follow', 'reload') if k in cfg})
+               if c['id'] == cfg['id'] else c for c in self._user_configs()]
+        self.save_settings(configs=lst)
+        return True
+
+    def cmd_removeConfig(self, id):
+        self.save_settings(configs=[c for c in self._user_configs() if c['id'] != id])
+        return True
+
+    def cmd_writeConfigFile(self, id, path, text, reload=True):
+        if id == 'hyprland':
+            return self.cmd_writeHypr(path, text, reload=reload)
+        p = pathlib.Path(os.path.expanduser(path))
+        if not self._allowed(p):
+            raise PermissionError(f'запись вне ~/.config и mors-dots запрещена: {path}')
+        real = p.resolve()
+        backup = None
+        if real.exists() and real not in self.hypr_backed:
+            bdir = CACHE_DIR / 'backups' / f'{datetime.datetime.now():%Y%m%d-%H%M%S}'
+            bdir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(real, bdir / real.name)
+            self.hypr_backed.add(real)
+            backup = f'~/.cache/mors-settings/backups/{bdir.name}/{real.name}'
+        real.parent.mkdir(parents=True, exist_ok=True)
+        tmp = real.with_name(real.name + '.mors-tmp')
+        tmp.write_text(text)
+        os.replace(tmp, real)
+        cfg = next((c for c in self.BUILTIN + self._user_configs() if c['id'] == id), {})
+        do_reload, reload = reload, None
+        if do_reload and cfg.get('reload'):
+            import shlex
+            code, out = run(shlex.split(cfg['reload']), timeout=20)
+            reload = {'cmd': cfg['reload'], 'ok': code in (0, 1), 'out': out}     # pkill: 1 — некому слать
+        return {'backup': backup, 'reload': reload}
+
     # ---------------------------------------------------------------- мониторы
     def _warm_flag(self):
         sig = os.environ.get('HYPRLAND_INSTANCE_SIGNATURE', '')
