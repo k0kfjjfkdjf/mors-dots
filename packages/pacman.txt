@@ -64,6 +64,7 @@ python
 python-gobject
 gtk3
 webkit2gtk-4.1
+kdialog
 
 # --- шрифты
 ttf-jetbrains-mono-nerd

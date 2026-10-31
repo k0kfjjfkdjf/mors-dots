@@ -218,6 +218,16 @@ input[type=color]{width:34px;height:28px;border:1px solid var(--border);border-r
 .wp.cur{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
 .wp span{position:absolute;left:0;right:0;bottom:0;padding:3px 7px;font-size:10.5px;font-family:var(--mono);color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.75));text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wp .badge2{position:absolute;top:6px;right:6px;font-size:10px;padding:1px 6px;border-radius:5px;background:var(--accent);color:var(--onaccent)}
+.fontbtn{background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 10px;cursor:pointer;font-size:14px;min-width:190px;text-align:left;display:flex;justify-content:space-between;gap:10px}
+.fontbtn:hover{border-color:var(--surf2)}.fontbtn span{color:var(--muted);font-family:Inter,system-ui,sans-serif}
+.fontlist{max-height:46vh;overflow:auto;border:1px solid var(--border);border-radius:8px;background:var(--bg)}
+.fitem{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:2px 10px;width:100%;text-align:left;background:none;border:none;border-bottom:1px solid var(--line);padding:8px 12px;color:var(--text);cursor:pointer}
+.fitem:hover{background:var(--panel2)}.fitem.sel{background:color-mix(in srgb,var(--accent) 16%,var(--panel))}
+.fitem b{font-size:15px;font-weight:500;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.fitem span{grid-column:1;color:var(--muted);font-size:13px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.fitem small{grid-row:1;grid-column:2;color:var(--dim);font-size:11px}
+#fontStyles .btn.on{background:var(--accent);border-color:var(--accent);color:var(--onaccent)}
+.fontpreview{margin-top:10px;padding:12px;border:1px dashed var(--border);border-radius:8px;font-size:20px;min-height:30px}
+.pathin .txt{flex:1;min-width:140px}
 .roval{font-family:var(--mono);font-size:12px;color:var(--muted);background:var(--bg);border:1px dashed var(--border);border-radius:6px;padding:4px 8px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:3px 9px;border-radius:20px;background:var(--bg);border:1px solid var(--border)}
 .pill i{width:7px;height:7px;border-radius:50%;background:var(--dim)}
@@ -432,7 +442,7 @@ input::placeholder,textarea::placeholder{color:var(--dim)}
     <div class="body">
       <div class="grid2">
         <div class="field"><label>Название</label><input type="text" id="mName" placeholder="Waybar, foot, mako…"></div>
-        <div class="field"><label>Главный файл</label><input type="text" id="mPath" placeholder="~/.config/foot/foot.ini"></div>
+        <div class="field"><label>Главный файл</label><span class="pathin"><input type="text" id="mPath" placeholder="~/.config/foot/foot.ini" style="flex:1"><button class="btn small" id="mPick" type="button">📁 Выбрать…</button></span></div>
       </div>
       <div class="field" id="mModeField"><label>Способ описания</label>
         <select id="mMode">
@@ -470,6 +480,19 @@ input::placeholder,textarea::placeholder{color:var(--dim)}
 </div>
 
 <!-- модалка файла -->
+<div class="modal-bg" id="fontModal">
+  <div class="modal">
+    <header><span>Шрифт</span><button class="x" data-close>✕</button></header>
+    <div class="body">
+      <input class="search" id="fontSearch" placeholder="Поиск по названию…" spellcheck="false">
+      <div class="fontlist" id="fontList"></div>
+      <div class="actions" id="fontStyles" style="margin-top:10px"></div>
+      <div class="fontpreview" id="fontPreview"></div>
+    </div>
+    <footer><button class="btn" data-close>Отмена</button><button class="btn primary" id="fontOk">Выбрать</button></footer>
+  </div>
+</div>
+
 <div class="modal-bg" id="fModalBg">
   <div class="modal sm">
     <header><span id="fTitle">Добавить файл</span><button class="x" data-close>✕</button></header>
@@ -879,6 +902,33 @@ function sectionsHTML(pf,f){
   let h='';for(const [sec,gs] of groups)h+=`<section class="section"><h2><span>${esc(sec)}</span><span class="cnt">${gs.length}</span></h2>${gs.map(rowHTML).join('')}</section>`;
   return {h,n:groups.size};
 }
+/* ---------- выбор файла и шрифта ---------- */
+async function pickPath(kind,start){
+  if(!BRIDGE){toast('В программе откроется окно выбора '+(kind==='dir'?'папки':'файла')+' KDE');return null;}
+  try{return await BRIDGE.call('pickFile',{kind,start:start||null});}catch(e){toast(e.message,true);return null;}}
+function hpObj(){try{return JSON.parse(hpCfg().files[0].text);}catch(e){return {};}}
+function hpSetKeys(kv){const c=hpCfg(),d=c.files[0],obj=JSON.parse(d.text);Object.assign(obj,kv);pushHistory('font',0);d.text=JSON.stringify(obj,null,2);
+  if(cur===c){state.parsed=parseCur();renderHP();renderPane();renderTop();}renderSidebar();if(BRIDGE&&state.live)hpScheduleWrite();}
+function fontStyleName(label,fam){const m=String(label||'').match(/,\s*(.+)$/);return m?m[1]:'Regular';}
+const FONTS_DEMO=['Roboto Condensed','Roboto','Geist Mono','JetBrains Mono Nerd Font','Noto Sans','Noto Serif','DejaVu Sans','DejaVu Sans Mono','Inter','Fira Code','Ubuntu','Cantarell','Source Code Pro','Liberation Serif']
+  .map(f=>({family:f,styles:['Regular','Medium','Bold','Italic','Light','Light Condensed'].slice(0,f.includes('Condensed')?6:4)}));
+let fontsCache=null,fontCb=null,fontSel=null;
+async function openFontPicker(cur0,cb,opts={}){fontCb=cb;fontSel={family:cur0.family||'',style:cur0.style||'Regular',noStyle:!!opts.noStyle};
+  $('#fontModal').classList.add('open');$('#fontSearch').value='';$('#fontList').innerHTML='<div class="note">Читаю шрифты…</div>';
+  if(!fontsCache){try{fontsCache=BRIDGE?await BRIDGE.call('fonts'):FONTS_DEMO;}catch(e){fontsCache=FONTS_DEMO;}}
+  renderFontList();setTimeout(()=>{$('#fontSearch').focus();const a=$('#fontList .fitem.sel');if(a)a.scrollIntoView({block:'center'});},30);}
+function renderFontList(){const q=$('#fontSearch').value.toLowerCase().trim(),list=fontsCache.filter(f=>!q||f.family.toLowerCase().includes(q)).slice(0,400);
+  $('#fontList').innerHTML=list.length?list.map(f=>`<button class="fitem ${f.family===fontSel.family?'sel':''}" data-fam="${esc(f.family)}"><b style="font-family:'${esc(f.family)}'">${esc(f.family)}</b><span style="font-family:'${esc(f.family)}'">Аа Бб Вв — The quick 0123</span><small>${f.styles.length} нач.</small></button>`).join(''):'<div class="note">Ничего не найдено</div>';
+  $$('#fontList .fitem').forEach(b=>b.onclick=()=>{fontSel.family=b.dataset.fam;const f=fontsCache.find(x=>x.family===fontSel.family);
+    if(f&&!f.styles.includes(fontSel.style))fontSel.style=f.styles[0];renderFontList();});
+  const f=fontsCache.find(x=>x.family===fontSel.family);
+  $('#fontStyles').innerHTML=fontSel.noStyle||!f?'':f.styles.map(s=>`<button class="btn small ${s===fontSel.style?'on':''}" data-sty="${esc(s)}">${esc(s)}</button>`).join('');
+  $$('#fontStyles [data-sty]').forEach(b=>b.onclick=()=>{fontSel.style=b.dataset.sty;renderFontList();});
+  const pv=$('#fontPreview'),it=/italic|oblique/i.test(fontSel.style),wt=/black|heavy/i.test(fontSel.style)?900:/extrabold|ultrabold/i.test(fontSel.style)?800:/bold/i.test(fontSel.style)?700:/semibold|demibold/i.test(fontSel.style)?600:/medium/i.test(fontSel.style)?500:/extralight|ultralight/i.test(fontSel.style)?200:/light/i.test(fontSel.style)?300:/thin/i.test(fontSel.style)?100:400;
+  pv.style.fontFamily=`'${fontSel.family}'`;pv.style.fontStyle=it?'italic':'normal';pv.style.fontWeight=wt;pv.style.fontStretch=/condensed/i.test(fontSel.style)?'condensed':'normal';
+  pv.textContent=fontSel.family?`${fontSel.family}${fontSel.noStyle?'':' · '+fontSel.style} — Съешь же ещё этих мягких французских булок`:'Выбери шрифт';
+  $('#fontOk').disabled=!fontSel.family;}
+
 /* ---------- копия окна настроек HyprPanel ---------- */
 const HP_TABS=[['config','Конфигурация'],['theme','Оформление']];
 const hpPagesOf=tab=>HP.pages.map((p,i)=>({...p,i})).filter(p=>p.tab===tab);
@@ -911,7 +961,9 @@ function hpControlHTML(it,g){
     case 'color':{const ok=/^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(v);
       return `${ok?`<input type="color" value="${esc(String(v).slice(0,7))}" data-role="hpcolor" ${d}>`:''}<input class="txt ctxt" type="text" value="${esc(v)}" data-role="hpctext" ${d} spellcheck="false">`;}
     case 'object':return `<textarea class="objta" data-role="hpobj" ${d} spellcheck="false">${esc(JSON.stringify(v))}</textarea>`;
-    case 'img':case 'wallpaper':return `<span class="pathin"><span>📁</span><input class="txt" type="text" value="${esc(v)}" data-role="hptext" ${d} spellcheck="false"></span>`;
+    case 'img':case 'wallpaper':return `<span class="pathin"><input class="txt" type="text" value="${esc(v)}" data-role="hptext" ${d} spellcheck="false"><button class="btn small" data-role="hppick" data-kind="image" ${d}>📁 Выбрать…</button></span>`;
+    case 'font':{const all=hpObj(),lab=all['theme.font.label']||v;
+      return `<button class="fontbtn" data-role="hpfont" ${d} style="font-family:'${esc(v)}'" title="Выбрать шрифт">${esc(lab)} <span>▾</span></button>`;}
     default:return `<input class="txt" type="text" value="${esc(v)}" data-role="hptext" ${d} spellcheck="false">`;}
 }
 function renderHP(){
@@ -949,6 +1001,9 @@ function bindHP(){
     if(role==='hpcolor')el.oninput=()=>{const old=String(it(g).value),nv=el.value+(old.length===9?old.slice(7):'');row(g).querySelector('[data-role=hpctext]').value=nv;setValue(g,nv);};
     if(role==='hpctext')el.oninput=()=>{const v=el.value.trim(),ok=/^#[0-9a-f]{6}([0-9a-f]{2})?$/i.test(v);el.classList.toggle('bad',!ok&&v!=='');
       const c=row(g).querySelector('[data-role=hpcolor]');if(ok&&c)c.value=v.slice(0,7);setValue(g,v);};
+    if(role==='hppick')el.onclick=async()=>{const p=await pickPath(el.dataset.kind,it(g).value);if(p){setValue(g,p);renderHP();}};
+    if(role==='hpfont')el.onclick=()=>{const all=hpObj();openFontPicker({family:it(g).value,style:fontStyleName(all['theme.font.label'],it(g).value)},(fam,sty)=>{
+      hpSetKeys({'theme.font.name':fam,'theme.font.label':/^(regular|book|normal)$/i.test(sty)?fam:`${fam}, ${sty}`,'theme.font.style':/italic/i.test(sty)?'italic':/oblique/i.test(sty)?'oblique':'normal'});});};
     if(role==='hpobj')el.oninput=()=>{let v;try{v=JSON.parse(el.value);}catch(e){el.classList.add('bad');return;}el.classList.remove('bad');setValue(g,v);};
   });
   body.querySelectorAll('[data-goto]').forEach(el=>el.onclick=()=>gotoItem(+el.dataset.goto));
@@ -996,6 +1051,8 @@ function controlHTML(it,g){
   if(t==='color'){const c=parseColor(v);if(c)return `<input type="color" value="${c.hex}" data-role="color" ${d}><input type="range" class="alpha" min="0" max="255" value="${c.a}" data-role="alpha" ${d} title="Прозрачность"><code class="craw" id="craw-${g}">${esc(v)}</code>`;}
   if(t==='keybind'){const kb=parseKb(v);
     return `<span class="kb">${MODS.map(x=>`<button class="mod ${kb.mods.has(x)?'on':''}" data-role="kbmod" data-mod="${x}" ${d}>${x==='SUPER'&&kb.mainMod?'$mainMod':x}</button>`).join('')}<span class="plus">+</span><button class="keycap" data-role="kbcap" ${d} title="Нажми и введи клавишу">${esc(kb.key||'?')}</button></span>`;}
+  if(t==='font')return `<button class="fontbtn" data-role="mfont" ${d} style="font-family:'${esc(v)}'" title="Выбрать шрифт">${esc(v)} <span>▾</span></button>`;
+  if(t==='file'||t==='image'||t==='dir')return `<span class="pathin"><input class="txt" type="text" value="${esc(v)}" data-role="text" ${d} spellcheck="false"><button class="btn small" data-role="mpick" data-kind="${t}" ${d}>📁 Выбрать…</button></span>`;
   return `<input class="txt" type="text" value="${esc(v)}" data-role="text" ${d}>`;
 }
 function bindForm(){
@@ -1012,6 +1069,8 @@ function bindForm(){
       document.getElementById('craw-'+g).textContent=nv;setValue(g,nv);});
     if(role==='kbmod')el.addEventListener('click',()=>{const kb=parseKb(it().value),mods=new Set(kb.mods);const mm=el.dataset.mod;
       mods.has(mm)?mods.delete(mm):mods.add(mm);setValue(g,buildKb(kb,mods,kb.key),{rerender:true});checkConflict(g);});
+    if(role==='mfont')el.addEventListener('click',()=>openFontPicker({family:it().value},fam=>setValue(g,fam,{rerender:true}),{noStyle:true}));
+    if(role==='mpick')el.addEventListener('click',async()=>{const p=await pickPath(el.dataset.kind,it().value);if(p)setValue(g,p,{rerender:true});});
     if(role==='kbcap')el.addEventListener('click',()=>{if(state.capturing)stopCapture();state.capturing={g,el};el.classList.add('capturing');el.textContent='…';});
   });
   body.querySelectorAll('[data-goto]').forEach(el=>el.onclick=()=>gotoItem(+el.dataset.goto));
@@ -1160,6 +1219,9 @@ function updModal(){
   if($('#mFollow').checked)s+=`\n\n<span class="s">${esc(SRC_TPL[fk]('./extra.conf'))}</span>   <span class="d">← станет отдельным разделом</span>`;
   pv.innerHTML=s;
 }
+$('#mPick').onclick=async()=>{const p=await pickPath('file',$('#mPath').value||'~/.config/');if(p){$('#mPath').value=p.replace(/^\/home\/[^/]+/,'~');
+  if(!$('#mName').value.trim())$('#mName').value=p.split('/').slice(-2,-1)[0]||'';
+  const ext=(p.match(/\.(\w+)$/)||[])[1];if(ext==='lua'){$('#mFormat').value='lua';$('#mFormat').dispatchEvent(new Event('change'));}else if(['ini','toml'].includes(ext)){$('#mFormat').value='ini';$('#mFormat').dispatchEvent(new Event('change'));}updModal();}};
 $('#mFormat').addEventListener('change',()=>{const old=$('#mComment').value,nc=FORMATS[$('#mFormat').value].comment;
   ['#mBegin','#mBegin2','#mEnd'].forEach(id=>{const el=$(id);if(el.value.startsWith(old))el.value=nc+el.value.slice(old.length);});
   $('#mComment').value=nc;updModal();});
@@ -1215,6 +1277,8 @@ $('#fOk').onclick=()=>{
   closeModals();state.parsed=parseCur();const fi=cur.files.length-1;renderAll();focusFile(fi);
   toast('Файл добавлен — сохрани, чтобы записать его на диск');
 };
+$('#fontSearch').addEventListener('input',renderFontList);
+$('#fontOk').onclick=()=>{const cb=fontCb,f=fontSel;closeModals();if(cb&&f.family)cb(f.family,f.style);};
 function closeModals(){$$('.modal-bg').forEach(m=>m.classList.remove('open'));}
 $$('[data-close]').forEach(b=>b.onclick=closeModals);
 $$('.modal-bg').forEach(bg=>bg.addEventListener('mousedown',e=>{if(e.target===bg)closeModals();}));
@@ -1348,6 +1412,8 @@ function renderSystem(){
     try{await BRIDGE.call('setWallpaper',{rel});SYS.wp.current=rel;if(SYS.mon)SYS.mon.default={rel,uri:wpUri(rel)};renderSystem();termAdd('✓ обои: '+rel,'ok');}catch(e){termAdd('✗ '+e.message,'err');}});
   el.querySelectorAll('[data-mon]').forEach(b=>b.onclick=()=>{SYS.monSel=b.dataset.mon;renderSystem();});
   bindCrop();bindDisplays();
+  const wi=$('#wpImport');if(wi)wi.onclick=async()=>{if(!BRIDGE){toast('В программе откроется окно выбора картинок KDE — они скопируются в папку темы');return;}
+    try{const r=await BRIDGE.call('importWallpapers');if(r.added.length){termAdd('✓ добавлены обои: '+r.added.join(', '),'ok');loadWallpapers();}}catch(e){toast(e.message,true);}};
   const wo=$('#wpOpen');if(wo)wo.onclick=()=>BRIDGE?BRIDGE.call('openWallpaperFolder'):toast('В программе откроется папка темы');
   const wr=$('#wpReload');if(wr)wr.onclick=()=>{SYS._demoTheme=null;loadWallpapers();};
   el.querySelectorAll('[data-theme]').forEach(b=>b.onclick=()=>setSystemTheme(b.dataset.theme));
@@ -1411,7 +1477,7 @@ function wallpapersHTML(){
   return `${monMapHTML()}${selMon?cropHTML(selMon):''}
     ${w.files.length?`<div class="wps">${items}</div>`:'<div class="empty">Папка пуста — положи сюда картинки</div>'}
     ${w.leftovers&&w.leftovers.length?`<div class="note">В <code>wallpapers/local/</code> остались картинки без темы: ${w.leftovers.map(esc).join(', ')} — перенеси их в папку нужной темы.</div>`:''}
-    <div class="actions"><button class="btn" id="wpOpen">📁 Открыть папку темы</button><button class="btn" id="wpReload">⟳ Обновить список</button><span class="note">${esc(w.dir||'')}</span></div>
+    <div class="actions"><button class="btn primary" id="wpImport">＋ Добавить картинки…</button><button class="btn" id="wpOpen">📁 Открыть папку темы</button><button class="btn" id="wpReload">⟳ Обновить список</button><span class="note">${esc(w.dir||'')}</span></div>
     ${BRIDGE?'':'<div class="note">В браузере — пример с мониторами pc1 и нарисованными картинками; в окне программы здесь твои мониторы и обои.</div>'}`;}
 async function loadWallpapers(){if(!BRIDGE){SYS._demoTheme=null;demoWallpapers();if(state.view==='system')renderSystem();return;}
   try{SYS.wp=await BRIDGE.call('wallpapers');}catch(e){SYS.wp={files:[],dir:'',error:e.message};}

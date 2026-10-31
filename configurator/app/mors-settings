@@ -388,6 +388,84 @@ class Backend:
             reload = {'cmd': cfg['reload'], 'ok': code in (0, 1), 'out': out}     # pkill: 1 — некому слать
         return {'backup': backup, 'reload': reload}
 
+    # ---------------------------------------------------------------- шрифты и выбор файлов
+    _fonts = None
+
+    def cmd_fonts(self):
+        """Установленные шрифты: семейство → начертания (fc-list)."""
+        if self._fonts is None:
+            fams = {}
+            if shutil.which('fc-list'):
+                _, out = run(['fc-list', '--format', '%{family[0]}\t%{style[0]}\n'], timeout=20)
+                for line in out.splitlines():
+                    fam, _, style = line.partition('\t')
+                    if fam.strip():
+                        fams.setdefault(fam.strip(), set()).add(style.strip() or 'Regular')
+            order = {'Regular': 0, 'Book': 0, 'Normal': 0, 'Medium': 1, 'Italic': 2, 'Bold': 3}
+            self._fonts = [{'family': f, 'styles': sorted(st, key=lambda x: (order.get(x, 5), x))}
+                           for f, st in sorted(fams.items(), key=lambda kv: kv[0].lower())]
+        return self._fonts
+
+    picker = None          # окно выбора файла на GTK — подставляет App (нужен главный поток)
+    IMAGE_EXT = '*.png *.jpg *.jpeg *.webp *.gif *.bmp *.tif *.tiff'
+
+    def cmd_pickFile(self, kind='file', start=None, title=None, multiple=False):
+        """Системное окно выбора: kind = file | image | dir. Возвращает путь (или список) либо None."""
+        start = os.path.expanduser(start or '~')
+        if not os.path.exists(start):
+            start = os.path.dirname(start.rstrip('/')) or str(HOME)
+            if not os.path.isdir(start):
+                start = str(HOME)
+        title = title or {'dir': 'Выбери папку', 'image': 'Выбери картинку'}.get(kind, 'Выбери файл')
+        if shutil.which('kdialog'):                       # окно KDE — как в Dolphin
+            if kind == 'dir':
+                cmd = ['kdialog', '--title', title, '--getexistingdirectory', start]
+            else:
+                cmd = ['kdialog', '--title', title] + (['--multiple', '--separate-output'] if multiple else []) + \
+                      ['--getopenfilename', start] + ([f'Картинки ({self.IMAGE_EXT})'] if kind == 'image' else [])
+            p = subprocess.run(cmd, capture_output=True, text=True)
+            if p.returncode != 0:
+                return None
+            out = [l for l in p.stdout.splitlines() if l.strip()]
+            return out if multiple else (out[0] if out else None)
+        if self.picker:                                   # GTK / портал рабочего стола
+            return self.picker(kind, start, title, multiple)
+        if shutil.which('zenity'):
+            cmd = ['zenity', '--file-selection', '--title', title, '--filename', start.rstrip('/') + '/']
+            if kind == 'dir':
+                cmd.append('--directory')
+            if multiple:
+                cmd += ['--multiple', '--separator', '\n']
+            if kind == 'image':
+                cmd += ['--file-filter', f'Картинки | {self.IMAGE_EXT}']
+            p = subprocess.run(cmd, capture_output=True, text=True)
+            if p.returncode != 0:
+                return None
+            out = [l for l in p.stdout.splitlines() if l.strip()]
+            return out if multiple else (out[0] if out else None)
+        raise RuntimeError('нет окна выбора файлов: поставь kdialog (sudo pacman -S kdialog)')
+
+    def cmd_importWallpapers(self):
+        """Выбрать картинки и скопировать их в папку текущей темы."""
+        name = self.current_theme()
+        if not name:
+            raise RuntimeError('тема не выбрана')
+        files = self.cmd_pickFile('image', '~/Изображения' if (HOME / 'Изображения').is_dir() else '~',
+                                  'Картинки для обоев темы', multiple=True) or []
+        dest = RICE / 'wallpapers' / name
+        dest.mkdir(parents=True, exist_ok=True)
+        added = []
+        for f in files:
+            src = pathlib.Path(f)
+            if src.is_file():
+                target = dest / src.name
+                if target.exists() and target.read_bytes() != src.read_bytes():
+                    target = dest / f'{src.stem}-{datetime.datetime.now():%H%M%S}{src.suffix}'
+                if not target.exists():
+                    shutil.copy2(src, target)
+                    added.append(target.name)
+        return {'added': added}
+
     # ---------------------------------------------------------------- мониторы
     def _warm_flag(self):
         sig = os.environ.get('HYPRLAND_INSTANCE_SIGNATURE', '')
@@ -536,6 +614,7 @@ def main():
             self.win = self.view = None
             self.monitors = []
             self.backend = Backend(log=lambda text, kind='': self.emit({'type': 'log', 'text': text, 'kind': kind}))
+            self.backend.picker = self.pick_gtk
             self.open_page = None
 
         # ---- JS <-> Python
@@ -575,6 +654,28 @@ def main():
                 except Exception as e:  # ошибка уходит в интерфейс тостом
                     self.reply(msg['id'], False, str(e))
             threading.Thread(target=work, daemon=True).start()
+
+        # ---- окно выбора файла GTK (через портал рабочего стола, если он есть)
+        def pick_gtk(self, kind, start, title, multiple):
+            done, box = threading.Event(), {}
+
+            def show():
+                action = Gtk.FileChooserAction.SELECT_FOLDER if kind == 'dir' else Gtk.FileChooserAction.OPEN
+                dlg = Gtk.FileChooserNative.new(title, self.win, action, 'Выбрать', 'Отмена')
+                dlg.set_select_multiple(bool(multiple))
+                dlg.set_current_folder(start if os.path.isdir(start) else os.path.dirname(start))
+                if kind == 'image':
+                    flt = Gtk.FileFilter(); flt.set_name('Картинки')
+                    for ext in Backend.IMAGE_EXT.split():
+                        flt.add_pattern(ext)
+                    dlg.add_filter(flt)
+                if dlg.run() == Gtk.ResponseType.ACCEPT:
+                    box['v'] = dlg.get_filenames() if multiple else dlg.get_filename()
+                dlg.destroy(); done.set()
+                return False
+            GLib.idle_add(show)
+            done.wait()
+            return box.get('v')
 
         # ---- слежка за файлами
         def watch(self, path, cb):
