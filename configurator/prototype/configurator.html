@@ -1224,7 +1224,10 @@ async function bootBridge(){
   }catch(e){toast('Оболочка не ответила: '+e.message,true);}
 }
 function onBridgeEvent(ev){
-  if(ev.type==='theme'&&RICE.themes[ev.name]&&ev.name!==riceCurrent){applyTheme(ev.name,true);loadWallpapers();}
+  if(ev.type==='theme'&&RICE.themes[ev.name]){
+    if(SYS.busy==='theme:'+ev.name){setBusy('');termAdd(`✓ тема ${RICE.themes[ev.name].name} применена`,'ok');}
+    if(ev.name!==riceCurrent)applyTheme(ev.name,true);else if(state.view==='system')renderSystem();
+    loadWallpapers();}
   if(ev.type==='hyprpanel'){const dirty=hpLoadText(ev.text);if(ev.external)setTimeout(()=>toast(dirty?'config.json HyprPanel изменился на диске — твои несохранённые правки не тронуты':'config.json HyprPanel обновлён с диска'),900);}
   if(ev.type==='open'&&ev.page==='system')openSystem();
   if(ev.type==='log'){termAdd(ev.text,ev.kind);}
@@ -1403,20 +1406,25 @@ function renderSystemZoom(){const el=$('#zoomSeg');if(!el)return;
   el.innerHTML=ZOOMS.map(z=>`<button class="${z===zoom?'on':''}" data-z="${z}">${z}%</button>`).join('')+`<input type="range" min="60" max="200" step="5" value="${zoom}" id="zoomR"><span class="zv">${zoom}%</span>`;
   el.querySelectorAll('[data-z]').forEach(b=>b.onclick=()=>applyZoom(+b.dataset.z));
   $('#zoomR').onchange=e=>applyZoom(+e.target.value);$('#zoomR').oninput=e=>{el.querySelector('.zv').textContent=e.target.value+'%';};}
-async function setSystemTheme(k){if(k===riceCurrent||SYS.busy)return;
+let busyTimer=null;
+function setBusy(v){SYS.busy=v;clearTimeout(busyTimer);
+  if(v)busyTimer=setTimeout(()=>{if(SYS.busy===v){SYS.busy='';termAdd('! rice.py отвечает слишком долго — кнопки снова доступны','err');if(state.view==='system')renderSystem();}},60000);}
+async function setSystemTheme(k){if(k===riceCurrent)return;
+  if(SYS.busy){toast(SYS.busy.startsWith('theme:')?`Тема ${RICE.themes[SYS.busy.slice(6)].name} ещё применяется…`:'Подожди, идёт обновление…');return;}
   if(!BRIDGE){termAdd(`$ rice.py apply ${k}`,'c');applyTheme(k,true);termAdd(`✓ тема ${RICE.themes[k].name} (имитация)`,'ok');return;}
-  SYS.busy='theme:'+k;renderSystem();termAdd(`$ rice.py apply ${k}`,'c');
-  try{const r=await BRIDGE.call('applyTheme',{name:k});termAdd(r.ok?`✓ тема ${RICE.themes[k].name} применена`:`✗ rice.py завершился с ошибкой (${r.code})`,r.ok?'ok':'err');
-    if(r.ok&&k!==riceCurrent)applyTheme(k,true);loadWallpapers();}
+  setBusy('theme:'+k);renderSystem();
+  try{const r=await BRIDGE.call('applyTheme',{name:k});
+    if(!r.ok)termAdd(`✗ rice.py завершился с ошибкой (${r.code})`,'err');
+    if(r.ok&&k!==riceCurrent)applyTheme(k,true);}
   catch(e){termAdd('✗ '+e.message,'err');}
-  SYS.busy='';renderSystem();}
+  if(SYS.busy==='theme:'+k)setBusy('');loadWallpapers();renderSystem();}
 async function updateRice(){if(SYS.busy)return;
   if(!BRIDGE){termAdd('$ git -C ~/mors-dots pull --ff-only','c');termAdd('(в браузере команды не выполняются — скопируй строку выше и запусти в терминале)');return;}
-  SYS.busy='update';SYS.needInstall=false;renderSystem();
+  setBusy('update');SYS.needInstall=false;renderSystem();
   try{const r=await BRIDGE.call('updateRice');SYS.repo=r.repo||SYS.repo;SYS.needInstall=!!r.needInstall;
     termAdd(r.message,r.ok?'ok':'err');if(r.needInstall)termAdd('! изменились пакеты или установщик — нажми «Запустить установщик в терминале»','err');}
   catch(e){termAdd('✗ '+e.message,'err');}
-  SYS.busy='';renderSystem();}
+  setBusy('');renderSystem();}
 $('#sysBtn').onclick=()=>state.view==='system'?selectConfig(cur):openSystem();
 document.addEventListener('keydown',e=>{if(!(e.ctrlKey||e.metaKey))return;
   if(e.key==='='||e.key==='+'){e.preventDefault();applyZoom(zoom+10);}

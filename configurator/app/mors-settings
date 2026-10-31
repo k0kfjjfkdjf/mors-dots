@@ -91,7 +91,7 @@ class Backend:
 
     # ---------------------------------------------------------------- тема
     def rice(self, *args):
-        cmd = [sys.executable, str(RICE / 'rice.py'), *args]
+        cmd = [sys.executable, '-u', str(RICE / 'rice.py'), *args]   # -u: шаги видны сразу, а не в конце
         self.log('$ rice.py ' + ' '.join(args), 'c')
         p = subprocess.Popen(cmd, stdout=subprocess.PIPE, stderr=subprocess.STDOUT, text=True)
         for line in p.stdout:

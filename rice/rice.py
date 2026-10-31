@@ -714,7 +714,8 @@ def apply(name):
         except Exception as e:
             print(f"  ✗ {label}: {e}")
     write(STATE, name + "\n")
-    run("notify-send", "-a", "rice", "Тема применена", t.raw["name"])
+    # не ждём ответа: служба уведомлений (HyprPanel) в этот момент сама перекрашивается
+    run("notify-send", "-a", "rice", "Тема применена", t.raw["name"], bg=True)
 
 
 def current():
