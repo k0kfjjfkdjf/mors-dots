@@ -212,8 +212,23 @@ class Backend:
         return True
 
 
+def ensure_session_env():
+    """Запуск не из сессии Hyprland (SSH, TTY, старый tmux): находим работающий Hyprland сами."""
+    run = os.environ.setdefault('XDG_RUNTIME_DIR', f'/run/user/{os.getuid()}')
+    hypr = pathlib.Path(run) / 'hypr'
+    if not os.environ.get('HYPRLAND_INSTANCE_SIGNATURE') and hypr.is_dir():
+        live = [d for d in hypr.iterdir() if (d / '.socket2.sock').exists()]
+        if live:
+            os.environ['HYPRLAND_INSTANCE_SIGNATURE'] = max(live, key=lambda d: d.stat().st_mtime).name
+    if not os.environ.get('WAYLAND_DISPLAY') and not os.environ.get('DISPLAY'):
+        socks = sorted(p.name for p in pathlib.Path(run).glob('wayland-*') if not p.name.endswith('.lock'))
+        if socks:
+            os.environ['WAYLAND_DISPLAY'] = socks[0]
+
+
 # ======================================================================== окно
 def main():
+    ensure_session_env()
     import gi
     gi.require_version('Gtk', '3.0')
     for v in ('4.1', '4.0'):
@@ -239,7 +254,11 @@ def main():
 
         # ---- JS <-> Python
         def js(self, code):
-            if self.view:
+            if not self.view:
+                return
+            if hasattr(self.view, 'evaluate_javascript'):        # WebKitGTK 2.40+
+                self.view.evaluate_javascript(code, -1, None, None, None, None, None)
+            else:
                 self.view.run_javascript(code, None, None, None)
 
         def emit(self, ev):

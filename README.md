@@ -107,7 +107,7 @@ install.sh   установщик
 [`configurator/prototype/configurator.html`](https://github.com/k0kfjjfkdjf/mors-dots/blob/configurator/configurator/prototype/configurator.html).
 
 ```bash
-git -C ~/mors-dots fetch origin configurator
-git -C ~/mors-dots worktree add ~/mors-dots-configurator configurator
-xdg-open ~/mors-dots-configurator/configurator/prototype/configurator.html
+git -C ~/mors-dots fetch origin
+git -C ~/mors-dots switch configurator      # обратно: git -C ~/mors-dots switch main
+~/mors-dots/configurator/app/mors-settings  # нужен webkit2gtk-4.1
 ```

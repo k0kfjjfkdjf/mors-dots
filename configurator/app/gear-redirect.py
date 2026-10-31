@@ -19,6 +19,20 @@ SETTINGS = HERE / 'mors-settings'
 BYPASS = pathlib.Path(os.environ.get('XDG_CACHE_HOME', pathlib.Path.home() / '.cache')) / 'mors-settings/allow-hyprpanel-settings'
 
 
+def ensure_session_env():
+    """Запуск не из сессии Hyprland (SSH, TTY, старый tmux): находим работающий Hyprland сами."""
+    run = os.environ.setdefault('XDG_RUNTIME_DIR', f'/run/user/{os.getuid()}')
+    hypr = pathlib.Path(run) / 'hypr'
+    if not os.environ.get('HYPRLAND_INSTANCE_SIGNATURE') and hypr.is_dir():
+        live = [d for d in hypr.iterdir() if (d / '.socket2.sock').exists()]
+        if live:
+            os.environ['HYPRLAND_INSTANCE_SIGNATURE'] = max(live, key=lambda d: d.stat().st_mtime).name
+    if not os.environ.get('WAYLAND_DISPLAY') and not os.environ.get('DISPLAY'):
+        socks = sorted(p.name for p in pathlib.Path(run).glob('wayland-*') if not p.name.endswith('.lock'))
+        if socks:
+            os.environ['WAYLAND_DISPLAY'] = socks[0]
+
+
 def socket_path():
     sig = os.environ.get('HYPRLAND_INSTANCE_SIGNATURE')
     if not sig:
@@ -57,6 +71,7 @@ PIDFILE = BYPASS.parent / 'gear-redirect.pid'
 
 
 def main():
+    ensure_session_env()
     PIDFILE.parent.mkdir(parents=True, exist_ok=True)
     try:                                         # второй экземпляр не нужен
         os.kill(int(PIDFILE.read_text()), 0)

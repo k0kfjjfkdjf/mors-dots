@@ -47,6 +47,15 @@ check_link "$DOTS/rice" "$HOME/.config/rice"
 check_link "$DOTS/config/gtk-3.0/settings.ini" "$HOME/.config/gtk-3.0/settings.ini"
 check_link "$DOTS/config/gtk-4.0/settings.ini" "$HOME/.config/gtk-4.0/settings.ini"
 
+hd "Сессия"
+if [[ -n "$HYPRLAND_INSTANCE_SIGNATURE" && -S "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr/$HYPRLAND_INSTANCE_SIGNATURE/.socket2.sock" ]]; then
+    ok "терминал внутри сессии Hyprland"
+elif compgen -G "${XDG_RUNTIME_DIR:-/run/user/$(id -u)}/hypr/*/.socket2.sock" >/dev/null; then
+    warn "этот терминал вне сессии Hyprland (SSH/TTY/старый tmux) — hyprctl и окна отсюда могут не работать; открой kitty в Hyprland"
+else
+    warn "Hyprland не запущен"
+fi
+
 hd "Машина и тема"
 host="$(cat "$HOME/.config/mors-dots/host" 2>/dev/null)"
 hl="$DOTS/config/hypr/lua/host.lua"
