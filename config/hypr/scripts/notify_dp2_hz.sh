@@ -8,25 +8,19 @@ gi.require_version("Gtk", "3.0")
 from gi.repository import Gtk, Gdk, GLib
 
 # ------------------------------------------------------------
-# 1. Получаем информацию о мониторе DP-2
+# 1. Находим монитор MKG по описанию (разъём DP-2 может смениться)
 # ------------------------------------------------------------
-result = subprocess.run(
-    ["hyprctl", "monitors"],
-    capture_output=True,
-    text=True
-)
-output = result.stdout
-
-# Ищем строку с DP-2, захватываем разрешение и частоту
-pattern = r"Monitor\s+DP-2.*?:\s*(\d+x\d+)@(\d+)"
-match = re.search(pattern, output)
-
-if not match:
-    print("Монитор DP-2 не найден", file=sys.stderr)
+import json
+MON_DESC = "MKG MKF23F180 H80297Q8NSCQL"
+mons = json.loads(subprocess.run(["hyprctl", "monitors", "-j"], capture_output=True, text=True).stdout or "[]")
+m = next((x for x in mons if x.get("description", "").startswith(MON_DESC)), None)
+if not m:
+    print("Монитор MKG не найден", file=sys.stderr)
     sys.exit(1)
 
-resolution = match.group(1)   # например "1920x1080"
-current_hz = match.group(2)    # например "180"
+resolution = f"{m['width']}x{m['height']}"
+current_hz = str(round(m["refreshRate"]))
+scale = m.get("scale", 1) or 1
 
 # ------------------------------------------------------------
 # 2. Создаём уведомление
@@ -69,18 +63,18 @@ Gtk.StyleContext.add_provider_for_screen(
     Gtk.STYLE_PROVIDER_PRIORITY_APPLICATION
 )
 
-label = Gtk.Label(label=f"DP-2: {resolution} @ {current_hz} Hz")
+label = Gtk.Label(label=f"{m['name']}: {resolution} @ {current_hz} Hz")
 label.set_justify(Gtk.Justification.CENTER)
 label.set_halign(Gtk.Align.CENTER)
 label.set_valign(Gtk.Align.CENTER)
 win.add(label)
 
 # ------------------------------------------------------------
-# 3. Центрируем окно примерно по центру DP-2
+# 3. Центрируем окно по центру монитора
 #    (можно вычислить динамически, но для простоты оставим фиксированные координаты)
 # ------------------------------------------------------------
-# Позиция монитора из вашего monitors.conf: 1280x0, размер 1920x1080
-win.move(1280 + 1920//2 - 150, 0 + 1080//2 - 40)
+# Позиция и размер — из hyprctl monitors -j
+win.move(m["x"] + int(m["width"] / scale) // 2 - 150, m["y"] + int(m["height"] / scale) // 2 - 40)
 
 win.show_all()
 

@@ -236,6 +236,55 @@ class Backend:
         code, out = run(['hyprctl', 'reload'], timeout=20)
         return {'ok': code == 0, 'out': out}
 
+    # ---------------------------------------------------------------- мониторы
+    def _warm_flag(self):
+        sig = os.environ.get('HYPRLAND_INSTANCE_SIGNATURE', '')
+        return pathlib.Path(os.environ.get('XDG_RUNTIME_DIR', '/tmp')) / 'hypr' / sig / 'mors-warm-done' if sig else None
+
+    def cmd_displays(self):
+        """Мониторы (с режимами, которые они поддерживают) + таблица MON из hosts/<машина>/hypr.lua."""
+        raw = os.environ.get('MORS_MONITORS_JSON')
+        if raw is None:
+            if not shutil.which('hyprctl'):
+                return {'monitors': [], 'host': None}
+            _, raw = run(['hyprctl', 'monitors', 'all', '-j'], timeout=10)
+        try:
+            mons = json.loads(raw)
+        except Exception:
+            mons = []
+        host = HOME / '.config/hypr/lua/host.lua'
+        flag = self._warm_flag()
+        return {'monitors': [{k: m.get(k) for k in ('name', 'description', 'make', 'model', 'width', 'height',
+                                                    'refreshRate', 'x', 'y', 'scale', 'transform', 'disabled',
+                                                    'focused', 'availableModes')} for m in mons],
+                'host': {'path': '~/.config/hypr/lua/host.lua', 'real': str(host.resolve()) if host.exists() else None,
+                         'text': host.read_text() if host.exists() else None},
+                'warmDone': bool(flag and flag.exists())}
+
+    def cmd_applyMonitors(self, rules):
+        """Применить сразу, без перечитывания конфига (иначе сбросится прогрев)."""
+        if not shutil.which('hyprctl'):
+            raise RuntimeError('нет hyprctl — окно запущено не в Hyprland?')
+        out = []
+        for r in rules:
+            parts = [f'output = {json.dumps(r["output"])}', f'mode = {json.dumps(r["mode"])}',
+                     f'position = {json.dumps(r["position"])}', f'scale = {float(r["scale"]):g}']
+            if int(r.get('transform') or 0):
+                parts.append(f'transform = {int(r["transform"])}')
+            lua = 'hl.monitor({ ' + ', '.join(parts) + ' })'
+            self.log('$ hyprctl eval ' + lua, 'c')
+            code, res = run(['hyprctl', 'eval', lua], timeout=10)
+            if not res.strip().startswith('ok'):        # старый .conf-конфиг понимает только keyword
+                out_name = r['output']
+                rule = f'{out_name},{r["mode"]},{r["position"]},{float(r["scale"]):g}' + \
+                       (f',transform,{int(r["transform"])}' if int(r.get('transform') or 0) else '')
+                code, res = run(['hyprctl', 'keyword', 'monitor', rule], timeout=10)
+            out.append({'output': r['output'], 'ok': code == 0, 'out': res.strip()})
+        return out
+
+    def cmd_writeHost(self, text):
+        return self.cmd_writeHypr('~/.config/hypr/lua/host.lua', text, reload=False)
+
     # ---------------------------------------------------------------- обои
     def _rice_mod(self):
         import importlib.util
@@ -273,10 +322,10 @@ class Backend:
         return {'theme': name, 'monitors': out,
                 'default': {'rel': str(cur.relative_to(r.WP_DIR / name)), 'uri': cur.as_uri()} if cur else None}
 
-    def cmd_setMonitorWallpaper(self, key, rel=None, crop=None):
+    def cmd_setMonitorWallpaper(self, key, rel=None, crop=None, rotate=0, flip=False):
         name = self.current_theme()
         r = self._rice_mod()
-        r.set_monitor_wallpaper(name, key, rel, crop)
+        r.set_monitor_wallpaper(name, key, rel, crop, rotate, flip)
         code = self.rice('wallpaper', 'fade')
         return {'ok': code == 0}
 

@@ -9,8 +9,9 @@
     rice.py wallpapers [тема] — какие обои нашлись у темы (и где её папка)
     rice.py set-wallpaper <файл> — поставить конкретные обои текущей темы
     rice.py monitors          — мониторы и какие обои на каждом
-    rice.py monitor-wallpaper <монитор> <файл> [x y w h] — свои обои на один монитор
-                              (x y w h — кадр в долях картинки 0…1; «-» вместо файла — как у всех)
+    rice.py monitor-wallpaper <монитор> <файл> [x y w h] [--rotate 90] [--flip]
+                              — свои обои на один монитор (x y w h — кадр в долях картинки 0…1,
+                              поворот по часовой, отражение; «-» вместо файла — как у всех)
 
 Обои: у каждой темы своя папка wallpapers/<тема>/ — всё, что там лежит (png, jpg, webp,
 gif…, в том числе в подпапках), подхватывается само; прописывать пути не нужно.
@@ -232,8 +233,9 @@ def mon_state():
         return {}
 
 
-def set_monitor_wallpaper(theme, key, rel=None, crop=None):
-    """rel=None — монитор снова «как у всех». crop — [x, y, w, h] в долях картинки."""
+def set_monitor_wallpaper(theme, key, rel=None, crop=None, rotate=0, flip=False):
+    """rel=None — монитор снова «как у всех». crop — [x, y, w, h] в долях картинки
+    (уже повёрнутой). rotate — поворот по часовой 0/90/180/270, flip — отразить по горизонтали."""
     d = mon_state()
     per = d.setdefault(theme, {})
     if rel is None:
@@ -243,6 +245,10 @@ def set_monitor_wallpaper(theme, key, rel=None, crop=None):
             x, y, w, h = (min(max(float(v), 0.0), 1.0) for v in crop)
             crop = [round(x, 5), round(y, 5), round(max(w, 0.01), 5), round(max(h, 0.01), 5)]
         per[key] = {"file": rel, "crop": crop}
+        if int(rotate) % 360:
+            per[key]["rotate"] = int(rotate) % 360
+        if flip:
+            per[key]["flip"] = True
     if not per:
         d.pop(theme, None)
     write(MON_STATE, json.dumps(d, ensure_ascii=False, indent=2))
@@ -255,10 +261,11 @@ def render_for_monitor(theme, mon, entry):
     if not src.is_file():
         return None
     crop = entry.get("crop")
-    if not crop or src.suffix.lower() == ".gif" or not (mon["w"] and mon["h"]):
+    rot, flip = int(entry.get("rotate", 0)) % 360, bool(entry.get("flip"))
+    if src.suffix.lower() == ".gif" or not (mon["w"] and mon["h"]) or not (crop or rot or flip):
         return src
     out = MON_CACHE / theme / ("".join(c if c.isalnum() else "_" for c in mon["key"])[:80] + ".png")
-    sig = f"{src}|{src.stat().st_mtime_ns}|{crop}|{mon['w']}x{mon['h']}"
+    sig = f"{src}|{src.stat().st_mtime_ns}|{crop}|{rot}|{flip}|{mon['w']}x{mon['h']}"
     sigf = out.with_suffix(".sig")
     if out.exists() and sigf.exists() and sigf.read_text() == sig:
         return out
@@ -267,6 +274,15 @@ def render_for_monitor(theme, mon, entry):
         gi.require_version("GdkPixbuf", "2.0")
         from gi.repository import GdkPixbuf
         pb = GdkPixbuf.Pixbuf.new_from_file(str(src))
+        if rot:          # сначала поворот по часовой, потом отражение — так же делает конфигуратор
+            pb = pb.rotate_simple({90: GdkPixbuf.PixbufRotation.CLOCKWISE,
+                                   180: GdkPixbuf.PixbufRotation.UPSIDEDOWN,
+                                   270: GdkPixbuf.PixbufRotation.COUNTERCLOCKWISE}[rot])
+        if flip:
+            pb = pb.flip(True)
+        if not crop:     # без кадра — заполнить экран по центру
+            a, A = pb.get_width() / pb.get_height(), mon["w"] / mon["h"]
+            crop = [(1 - A / a) / 2, 0, A / a, 1] if a > A else [0, (1 - a / A) / 2, 1, a / A]
         W, H = pb.get_width(), pb.get_height()
         x, y = int(crop[0] * W), int(crop[1] * H)
         w, h = max(1, min(int(crop[2] * W), W - x)), max(1, min(int(crop[3] * H), H - y))
@@ -807,8 +823,13 @@ def main(argv):
             if not f:
                 print(f"Нет такой картинки у темы {name}: {argv[3]}")
                 return 1
-            crop = [float(v) for v in argv[4:8]] if len(argv) >= 8 else None
-            set_monitor_wallpaper(name, m["key"], str(f.relative_to(WP_DIR / name)), crop)
+            rest = argv[4:]
+            rot = int(rest[rest.index("--rotate") + 1]) if "--rotate" in rest else 0
+            flip = "--flip" in rest
+            nums = [a for a in rest if a.replace(".", "", 1).isdigit()]
+            nums = [n for n in nums if not ("--rotate" in rest and n == str(rot))]
+            crop = [float(v) for v in nums[:4]] if len(nums) >= 4 else None
+            set_monitor_wallpaper(name, m["key"], str(f.relative_to(WP_DIR / name)), crop, rot, flip)
         apply_wallpaper(Theme(name))
     else:
         print(__doc__)

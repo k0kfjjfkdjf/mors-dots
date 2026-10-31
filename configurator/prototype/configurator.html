@@ -175,6 +175,21 @@ input[type=color]{width:34px;height:28px;border:1px solid var(--border);border-r
 .term{background:var(--bg);border:1px solid var(--border);border-radius:8px;font-family:var(--mono);font-size:12px;padding:8px 10px;max-height:240px;overflow:auto;margin-top:12px;white-space:pre-wrap;color:var(--muted)}
 .term:empty{display:none}
 .term .ok{color:var(--ok)}.term .err{color:var(--danger)}.term .c{color:var(--text)}
+.dmap{position:relative;width:100%;margin:0 auto 14px;background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:0}
+.dmon{position:absolute;box-sizing:border-box;border:2px solid var(--surf2);border-radius:6px;background:var(--panel2);cursor:grab;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;gap:2px;overflow:hidden;user-select:none;touch-action:none;padding:4px}
+.dmon:active{cursor:grabbing}
+.dmon b{font-family:var(--mono);font-size:12px}
+.dmon span{font-size:11px;color:var(--muted);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;max-width:100%}
+.dmon small{font-size:10.5px;color:var(--dim);font-family:var(--mono)}
+.dmon.sel{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent);z-index:2;background:color-mix(in srgb,var(--accent) 12%,var(--panel2))}
+.dmon.dirty{border-style:dashed;border-color:var(--mod)}
+.dpanel{display:flex;flex-direction:column;gap:10px}
+.dgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.dgrid label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+.dgrid select{width:100%}
+.dpos{padding:6px 0;color:var(--text)}
+.dconfirm{display:flex;align-items:center;gap:10px;flex-wrap:wrap;padding:10px 12px;border-radius:9px;background:color-mix(in srgb,var(--mod) 14%,var(--panel));border:1px solid color-mix(in srgb,var(--mod) 40%,var(--panel))}
+.note.err{color:var(--danger)}
 .monbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:10px}
 .monbar .btn.on{background:var(--accent);border-color:var(--accent);color:var(--onaccent)}
 .monmap{position:relative;width:100%;margin:0 auto 14px;background:var(--bg);border-radius:10px;border:1px solid var(--border)}
@@ -185,8 +200,9 @@ input[type=color]{width:34px;height:28px;border:1px solid var(--border);border-r
 .mon small{display:block;font-size:9.5px;opacity:.85}
 .mon.own span{background:linear-gradient(transparent,color-mix(in srgb,var(--accent) 70%,#000))}
 .cropui{display:grid;grid-template-columns:minmax(0,1fr) 240px;gap:16px;margin-bottom:14px;align-items:start}
-.cropbox{position:relative;display:inline-block;max-width:100%;justify-self:start;line-height:0;border-radius:8px;overflow:hidden;background:#000;user-select:none;touch-action:none}
-.cropbox img{display:block;max-width:100%;max-height:360px;width:auto;height:auto}
+.cropbox{position:relative;justify-self:start;border-radius:8px;overflow:hidden;background:#000;user-select:none;touch-action:none;width:480px;height:270px}
+.cropbox img{position:absolute;display:block;max-width:none;transform-origin:center center}
+.cropside .btn.on{background:var(--accent);border-color:var(--accent);color:var(--onaccent)}
 .croprect{position:absolute;box-shadow:0 0 0 9999px rgba(0,0,0,.55);outline:2px solid var(--accent);cursor:move}
 .croprect i{position:absolute;inset:0;pointer-events:none}
 .croprect .g1{border-left:1px solid rgba(255,255,255,.25);border-right:1px solid rgba(255,255,255,.25);left:33.3%;right:33.3%}
@@ -1271,7 +1287,8 @@ function applyZoom(z,persist=true){z=Math.max(60,Math.min(200,Math.round(z)));zo
 
 /* ---------- страница «Система» ---------- */
 function openSystem(){if(state.capturing)stopCapture();state.view='system';$('#content').hidden=true;$('#sysview').hidden=false;renderSidebar();renderTop();renderSystem();
-  if(BRIDGE){BRIDGE.call('state').then(st=>{SYS.repo=st.repo;SYS.gear=st.gear;renderSystem();}).catch(()=>{});loadWallpapers();}}
+  if(BRIDGE){BRIDGE.call('state').then(st=>{SYS.repo=st.repo;SYS.gear=st.gear;renderSystem();}).catch(()=>{});loadWallpapers();}
+  loadDisplays();}
 function closeSystem(){state.view='cfg';$('#sysview').hidden=true;$('#content').hidden=false;}
 function termAdd(text,kind){SYS.term.push({text,kind});if(SYS.term.length>400)SYS.term.splice(0,SYS.term.length-400);
   const el=document.getElementById('term');if(el){el.insertAdjacentHTML('beforeend',termLine(SYS.term[SYS.term.length-1]));el.scrollTop=el.scrollHeight;}}
@@ -1287,6 +1304,9 @@ function renderSystem(){
     <section class="card"><h2>Тема системы</h2>
       <div class="sub">Применяется ко всему райсу сразу — Hyprland, HyprPanel, kitty, rofi, GTK/Qt, fish, обои, экран входа. То же, что <code>rice.py apply</code> и <kbd>Super</kbd>+<kbd>Shift</kbd>+<kbd>T</kbd>.${demo?' <b>В браузере — имитация.</b>':''}</div>
       <div class="themes">${themes}</div></section>
+    <section class="card"><h2>Мониторы</h2>
+      <div class="sub">Перетаскивай мониторы мышью, выбирай разрешение, частоту, масштаб и поворот — как в KDE. Применяется сразу, без перечитывания конфига (прогрев не сбивается); через 15 с без «Оставить» всё вернётся. Сохраняется в таблицу <code>MON</code> в <code>hosts/&lt;машина&gt;/hypr.lua</code>.</div>
+      ${displaysHTML()}</section>
     <section class="card"><h2>Обои${SYS.wp&&SYS.wp.theme?' — '+esc((RICE.themes[SYS.wp.theme]||{}).name||SYS.wp.theme):''}</h2>
       <div class="sub">У каждой темы своя папка <code>~/.config/rice/wallpapers/&lt;тема&gt;/</code> — всё, что туда положишь (png, jpg, webp, gif), появится здесь само. Для новой темы папка создаётся автоматически.</div>
       ${wallpapersHTML()}</section>
@@ -1313,7 +1333,7 @@ function renderSystem(){
     if(!BRIDGE){SYS.wp.current=rel;SYS.mon.default={rel,uri:wpUri(rel)};renderSystem();return;}
     try{await BRIDGE.call('setWallpaper',{rel});SYS.wp.current=rel;if(SYS.mon)SYS.mon.default={rel,uri:wpUri(rel)};renderSystem();termAdd('✓ обои: '+rel,'ok');}catch(e){termAdd('✗ '+e.message,'err');}});
   el.querySelectorAll('[data-mon]').forEach(b=>b.onclick=()=>{SYS.monSel=b.dataset.mon;renderSystem();});
-  bindCrop();
+  bindCrop();bindDisplays();
   const wo=$('#wpOpen');if(wo)wo.onclick=()=>BRIDGE?BRIDGE.call('openWallpaperFolder'):toast('В программе откроется папка темы');
   const wr=$('#wpReload');if(wr)wr.onclick=()=>{SYS._demoTheme=null;loadWallpapers();};
   el.querySelectorAll('[data-theme]').forEach(b=>b.onclick=()=>setSystemTheme(b.dataset.theme));
@@ -1348,7 +1368,7 @@ function monMapHTML(){const mons=SYS.mon&&SYS.mon.monitors||[];if(!mons.length)r
   const L=mons.map(m=>({m,x:m.x,y:m.y,w:m.w/m.scale,h:m.h/m.scale})),minx=Math.min(...L.map(o=>o.x)),miny=Math.min(...L.map(o=>o.y)),
     bw=Math.max(...L.map(o=>o.x+o.w))-minx,bh=Math.max(...L.map(o=>o.y+o.h))-miny,def=SYS.mon.default;
   const boxes=L.map(o=>{const e=o.m.entry,sel=SYS.monSel===o.m.key;
-    const st=e?bgStyle(e.uri||wpUri(e.file),e.crop):bgStyle(def&&def.uri,null);
+    const st=e?bgStyle(transformedUri(e.uri||wpUri(e.file),e.rotate||0,!!e.flip),e.crop):bgStyle(def&&def.uri,null);
     return `<button class="mon ${sel?'sel':''} ${e?'own':''}" data-mon="${esc(o.m.key)}" title="${esc(o.m.key)}" style="left:${(o.x-minx)/bw*100}%;top:${(o.y-miny)/bh*100}%;width:${o.w/bw*100}%;height:${o.h/bh*100}%;${st}">
       <span>${esc(o.m.name)}<small>${o.m.w}×${o.m.h}${e?' · свои':''}</small></span></button>`;}).join('');
   return `<div class="monbar"><button class="btn small ${SYS.monSel==='all'?'on':''}" data-mon="all">Все мониторы</button><span class="note">${SYS.monSel==='all'?'Клик по картинке — обои для всех мониторов. Нажми на монитор, чтобы задать ему свои.':`Клик по картинке — обои только для ${esc((mons.find(m=>m.key===SYS.monSel)||{}).name||'')}.`}</span></div>
@@ -1359,8 +1379,15 @@ function cropHTML(m){const e=m.entry;if(!e)return `<div class="note">У этог
     <div class="cropside"><b>${esc(m.name)}</b><span class="note">${m.w}×${m.h} · ${esc(e.file)}</span>
       <div class="note">Тяни рамку мышью, колесо — масштаб. Рамка всегда в пропорциях монитора.</div>
       <label class="note">Масштаб <input type="range" id="cropZoom" min="100" max="400" step="5" value="100"> <span id="cropZv">100%</span></label>
+      <div class="actions"><button class="btn small" id="rotL" title="Повернуть против часовой">⟲ 90°</button><button class="btn small" id="rotR" title="Повернуть по часовой">⟳ 90°</button><button class="btn small ${e.flip?'on':''}" id="flipH" title="Отразить по горизонтали">⇋ Отразить</button></div>
       <div class="actions"><button class="btn small" id="cropFill">Заполнить</button><button class="btn small" id="cropCenter">По центру</button><button class="btn small" id="monReset">Как у всех</button></div>
       <span class="note" id="cropInfo"></span></div></div>`;}
+/* превью повёрнутой картинки для схемы мониторов (если canvas доступен) */
+const prevCache={};
+function transformedUri(uri,rot,flip){if(!uri||(!rot&&!flip))return uri;const k=uri+'|'+rot+'|'+flip;if(prevCache[k])return prevCache[k];
+  const im=new Image();im.onload=()=>{try{const sc=Math.min(1,1200/Math.max(im.width,im.height)),w=im.width*sc,h=im.height*sc,c=document.createElement('canvas'),q=rot%180;
+    c.width=q?h:w;c.height=q?w:h;const g=c.getContext('2d');g.translate(c.width/2,c.height/2);if(flip)g.scale(-1,1);g.rotate(rot*Math.PI/180);g.drawImage(im,-w/2,-h/2,w,h);
+    prevCache[k]=c.toDataURL('image/jpeg',.85);if(state.view==='system')renderSystem();}catch(e){prevCache[k]=uri;}};im.src=uri;return uri;}
 function wallpapersHTML(){
   if(!BRIDGE)demoWallpapers();
   const w=SYS.wp;if(!w)return '<div class="note">Загружаю…</div>';
@@ -1377,23 +1404,31 @@ async function loadWallpapers(){if(!BRIDGE){SYS._demoTheme=null;demoWallpapers()
   try{SYS.mon=await BRIDGE.call('monitors');}catch(e){SYS.mon=null;}
   if(!SYS.monSel||(SYS.monSel!=='all'&&!(SYS.mon&&SYS.mon.monitors.some(m=>m.key===SYS.monSel))))SYS.monSel='all';
   if(state.view==='system')renderSystem();}
-async function setMonitorWallpaper(key,rel,crop,quiet){const m=SYS.mon.monitors.find(m=>m.key===key);if(!m)return;
-  m.entry=rel?{file:rel,crop:crop||null,uri:wpUri(rel)}:null;
-  if(!quiet)termAdd(rel?`$ rice.py monitor-wallpaper ${m.name} ${rel}${crop?' '+crop.map(v=>v.toFixed(3)).join(' '):''}`:`$ rice.py monitor-wallpaper ${m.name} -`,'c');
-  if(BRIDGE){try{await BRIDGE.call('setMonitorWallpaper',{key,rel:rel||null,crop:crop||null});}catch(e){termAdd('✗ '+e.message,'err');}}}
+async function setMonitorWallpaper(key,rel,crop,quiet,rotate=0,flip=false){const m=SYS.mon.monitors.find(m=>m.key===key);if(!m)return;
+  m.entry=rel?{file:rel,crop:crop||null,uri:wpUri(rel),rotate,flip}:null;
+  if(!quiet)termAdd(rel?`$ rice.py monitor-wallpaper ${m.name} ${rel}${crop?' '+crop.map(v=>v.toFixed(3)).join(' '):''}${rotate?' --rotate '+rotate:''}${flip?' --flip':''}`:`$ rice.py monitor-wallpaper ${m.name} -`,'c');
+  if(BRIDGE){try{await BRIDGE.call('setMonitorWallpaper',{key,rel:rel||null,crop:crop||null,rotate,flip});}catch(e){termAdd('✗ '+e.message,'err');}}}
 let cropTimer=null;
 function bindCrop(){const box=$('#cropBox'),img=$('#cropImg'),rect=$('#cropRect');if(!box||!img)return;
-  const m=SYS.mon.monitors.find(m=>m.key===SYS.monSel),e=m.entry,monA=m.w/m.h;let imgA=1.6,z=1,c=null;
+  const m=SYS.mon.monitors.find(m=>m.key===SYS.monSel),e=m.entry,monA=m.w/m.h;let imgA=1.6,z=1,c=null,rot=(e.rotate||0)%360,flip=!!e.flip,nw=0,nh=0;
+  /* картинка поворачивается CSS-трансформацией, рамка считается в координатах уже повёрнутой картинки */
+  const layout=()=>{const q=rot%180,rw=q?nh:nw,rh=q?nw:nh;imgA=rw/rh;
+    const maxW=Math.max(200,box.parentElement.clientWidth-(window.innerWidth>1100?256:0)),maxH=360,W=Math.min(maxW,maxH*imgA),H=W/imgA;
+    Object.assign(box.style,{width:W+'px',height:H+'px'});const iw=q?H:W,ih=q?W:H;
+    Object.assign(img.style,{width:iw+'px',height:ih+'px',left:(W-iw)/2+'px',top:(H-ih)/2+'px',transform:`${flip?'scaleX(-1) ':''}rotate(${rot}deg)`});};
   const draw=()=>{const [x,y,w,h]=c;Object.assign(rect.style,{left:x*100+'%',top:y*100+'%',width:w*100+'%',height:h*100+'%'});
     $('#cropZoom').value=Math.round(z*100);$('#cropZv').textContent=Math.round(z*100)+'%';
-    $('#cropInfo').textContent=img.naturalWidth?`кадр ${Math.round(c[2]*img.naturalWidth)}×${Math.round(c[3]*img.naturalHeight)} пикс. → ${m.w}×${m.h}`+(c[2]*img.naturalWidth<m.w*0.98?' · картинка будет растянута':''):'';
-    const b=document.querySelector(`.mon[data-mon="${CSS.escape(m.key)}"]`);if(b)b.setAttribute('style',b.getAttribute('style').replace(/background-image[^]*$/,'')+bgStyle(img.src,c));};
-  const commit=()=>{e.crop=c.slice();clearTimeout(cropTimer);cropTimer=setTimeout(()=>setMonitorWallpaper(m.key,e.file,c,true),450);};
+    const q=rot%180,rw=q?nh:nw,rh=q?nw:nh;
+    $('#cropInfo').textContent=nw?`кадр ${Math.round(c[2]*rw)}×${Math.round(c[3]*rh)} пикс. → ${m.w}×${m.h}`+(c[2]*rw<m.w*0.98?' · картинка будет растянута':''):'';
+    const b=document.querySelector(`.mon[data-mon="${CSS.escape(m.key)}"]`);if(b)b.setAttribute('style',b.getAttribute('style').replace(/background-image[^]*$/,'')+bgStyle(transformedUri(img.src,rot,flip),c));};
+  const commit=()=>{e.crop=c.slice();e.rotate=rot;e.flip=flip;clearTimeout(cropTimer);cropTimer=setTimeout(()=>setMonitorWallpaper(m.key,e.file,c,true,rot,flip),450);};
   const clamp=()=>{c[0]=Math.min(Math.max(c[0],0),1-c[2]);c[1]=Math.min(Math.max(c[1],0),1-c[3]);};
   const setZoom=(nz,cx,cy)=>{z=Math.min(Math.max(nz,1),4);cx=cx??c[0]+c[2]/2;cy=cy??c[1]+c[3]/2;const f=fullCrop(imgA,monA,z);c=[cx-f[2]/2,cy-f[3]/2,f[2],f[3]];clamp();draw();};
-  const init=()=>{imgA=img.naturalWidth/img.naturalHeight;const f=fullCrop(imgA,monA);
-    if(e.crop){c=e.crop.slice();z=Math.max(1,f[2]/c[2]);c[3]=c[2]*monA/imgA;clamp();}else c=f;draw();};
+  const init=()=>{nw=img.naturalWidth;nh=img.naturalHeight;layout();const f=fullCrop(imgA,monA);
+    if(e.crop){c=e.crop.slice();z=Math.max(1,f[2]/c[2]);c[3]=c[2]*imgA/monA;if(c[3]>1){c[3]=1;c[2]=monA/imgA;z=1;}clamp();}else c=f;draw();};
   if(img.complete&&img.naturalWidth)init();else img.onload=init;
+  const reorient=()=>{layout();z=1;c=fullCrop(imgA,monA);draw();commit();$('#flipH').classList.toggle('on',flip);termAdd(`поворот ${rot}°${flip?', отражение':''}`);};
+  $('#rotL').onclick=()=>{rot=(rot+270)%360;reorient();};$('#rotR').onclick=()=>{rot=(rot+90)%360;reorient();};$('#flipH').onclick=()=>{flip=!flip;reorient();};
   rect.onpointerdown=ev=>{ev.preventDefault();rect.setPointerCapture(ev.pointerId);const r=box.getBoundingClientRect(),sx=ev.clientX,sy=ev.clientY,c0=c.slice();
     rect.onpointermove=mv=>{c[0]=c0[0]+(mv.clientX-sx)/r.width;c[1]=c0[1]+(mv.clientY-sy)/r.height;clamp();draw();};
     rect.onpointerup=()=>{rect.onpointermove=null;commit();};};
@@ -1402,6 +1437,113 @@ function bindCrop(){const box=$('#cropBox'),img=$('#cropImg'),rect=$('#cropRect'
   $('#cropFill').onclick=()=>{z=1;c=fullCrop(imgA,monA);draw();commit();};
   $('#cropCenter').onclick=()=>{c[0]=(1-c[2])/2;c[1]=(1-c[3])/2;draw();commit();};
   $('#monReset').onclick=async()=>{await setMonitorWallpaper(m.key,null);renderSystem();};}
+/* ---------- мониторы: расстановка, режимы ---------- */
+const DISP_DEMO={warmDone:true,host:{path:'~/.config/hypr/lua/host.lua',text:`local MON = {
+--@monitors
+    benq    = { output = "desc:BNQ BenQ FP93G 0x00004011", mode = "1280x1024@75", position = "0x0", scale = 1, transform = 0 },
+    main    = { output = "desc:MKG MKF23F180 H80297Q8NSCQL", mode = "1920x1080@60", position = "1280x0", scale = 1, transform = 0, warm = "1920x1080@180" },
+    samsung = { output = "desc:Samsung Electric Company SAMSUNG", mode = "1920x1080@60", position = "3200x0", scale = 1, transform = 0 },
+--@end
+}`},monitors:[
+  {name:'HDMI-A-1',description:'BNQ BenQ FP93G 0x00004011',make:'BenQ',model:'FP93G',width:1280,height:1024,refreshRate:75.02,x:0,y:0,scale:1,transform:0,availableModes:['1280x1024@75.02Hz','1280x1024@60.02Hz','1152x864@75.00Hz','1024x768@75.03Hz','1024x768@60.00Hz','800x600@75.00Hz','800x600@60.32Hz']},
+  {name:'DP-2',description:'MKG MKF23F180 H80297Q8NSCQL',make:'MKG',model:'MKF23F180',width:1920,height:1080,refreshRate:180,x:1280,y:0,scale:1,transform:0,availableModes:['1920x1080@180.00Hz','1920x1080@165.00Hz','1920x1080@144.00Hz','1920x1080@120.00Hz','1920x1080@60.00Hz','1680x1050@59.95Hz','1280x1024@75.02Hz','1280x720@60.00Hz']},
+  {name:'HDMI-A-2',description:'Samsung Electric Company SAMSUNG',make:'Samsung',model:'TV',width:1920,height:1080,refreshRate:60,x:3200,y:0,scale:1,transform:0,availableModes:['3840x2160@30.00Hz','1920x1080@60.00Hz','1920x1080@50.00Hz','1280x720@60.00Hz','720x576@50.00Hz']}]};
+const ROT=['0°','90°','180°','270°'],SCALES=[1,1.25,1.5,1.75,2];
+const fmtRate=r=>String(Math.round(r*100)/100);
+function parseMonTable(text){const lines=(text||'').split('\n'),a=lines.findIndex(l=>/^\s*--@monitors\s*$/.test(l));if(a<0)return null;
+  let b=lines.findIndex((l,i)=>i>a&&/^\s*--@end\s*$/.test(l));if(b<0)return null;const entries=[];
+  for(let i=a+1;i<b;i++){const m=lines[i].match(/^(\s*)(\w+)\s*=\s*\{(.*)\}\s*,?\s*(--.*)?$/);if(!m)continue;const fields={},order=[];
+    for(const f of m[3].matchAll(/(\w+)\s*=\s*("(?:[^"\\]|\\.)*"|-?[\d.]+)/g)){fields[f[1]]=f[2].startsWith('"')?JSON.parse(f[2]):+f[2];order.push(f[1]);}
+    entries.push({line:i,indent:m[1],key:m[2],fields,order,comment:m[4]||''});}
+  return {lines,a,b,entries};}
+const monLine=e=>`${e.indent}${e.key} = { ${e.order.map(k=>`${k} = ${typeof e.fields[k]==='string'?JSON.stringify(e.fields[k]):e.fields[k]}`).join(', ')} },${e.comment?' '+e.comment:''}`;
+const entryFor=(tbl,m)=>tbl&&tbl.entries.find(e=>{const o=String(e.fields.output||'');return o.startsWith('desc:')?(m.description||'').startsWith(o.slice(5)):o===m.name;});
+const splitMode=s=>{const x=String(s||'').match(/^(\d+x\d+)(?:@([\d.]+))?/);return x?{res:x[1],rate:x[2]?+x[2]:null}:{res:'preferred',rate:null};};
+function dispModel(d){const tbl=parseMonTable(d.host&&d.host.text);
+  return d.monitors.filter(m=>!m.disabled).map(m=>{const e=entryFor(tbl,m),f=e?e.fields:{},start=splitMode(f.mode),warm=f.warm?splitMode(f.warm):null;
+    const pos=/^-?\d+x-?\d+$/.test(f.position||'')?f.position.split('x').map(Number):[m.x,m.y];
+    const st={res:start.res==='preferred'?'preferred':start.res,rate:start.rate??m.refreshRate,warmRate:warm?warm.rate:null,
+      x:pos[0],y:pos[1],scale:+(f.scale??m.scale??1),transform:+(f.transform??m.transform??0)};
+    return {m,e,init:{...st},cur:{...st}};});}
+function modesOf(m){const map=new Map();for(const s of m.availableModes||[]){const x=s.match(/^(\d+)x(\d+)@([\d.]+)/);if(!x)continue;const r=`${x[1]}x${x[2]}`;
+    if(!map.has(r))map.set(r,[]);map.get(r).push(+x[3]);}
+  return [...map.entries()].sort((a,b)=>{const [aw,ah]=a[0].split('x').map(Number),[bw,bh]=b[0].split('x').map(Number);return bw*bh-aw*ah;}).map(([r,rates])=>({res:r,rates:rates.sort((a,b)=>b-a)}));}
+function logical(o){const c=o.cur,[w,h]=c.res==='preferred'?[o.m.width,o.m.height]:c.res.split('x').map(Number),q=c.transform%2;return {w:(q?h:w)/c.scale,h:(q?w:h)/c.scale};}
+const dirtyMon=o=>JSON.stringify(o.cur)!==JSON.stringify(o.init);
+async function loadDisplays(){let d;
+  if(BRIDGE){try{d=await BRIDGE.call('displays');}catch(e){d=null;}}else d=JSON.parse(JSON.stringify(DISP_DEMO));
+  SYS.disp=d&&{...d,model:dispModel(d)};if(SYS.disp&&!SYS.disp.model.some(o=>o.m.name===SYS.dispSel))SYS.dispSel=SYS.disp.model[0]&&SYS.disp.model[0].m.name;
+  if(state.view==='system')renderSystem();}
+function displaysHTML(){const D=SYS.disp;if(!D)return '<div class="note">Читаю мониторы…</div>';if(!D.model.length)return '<div class="note">hyprctl не вернул ни одного монитора.</div>';
+  const tbl=parseMonTable(D.host&&D.host.text);
+  const L=D.model.map(o=>({o,...logical(o),x:o.cur.x,y:o.cur.y})),minx=Math.min(...L.map(r=>r.x)),miny=Math.min(...L.map(r=>r.y)),
+    bw=Math.max(...L.map(r=>r.x+r.w))-minx,bh=Math.max(...L.map(r=>r.y+r.h))-miny;SYS.dispBox={minx,miny,bw,bh};
+  const boxes=L.map(r=>`<div class="dmon ${r.o.m.name===SYS.dispSel?'sel':''} ${dirtyMon(r.o)?'dirty':''}" data-dmon="${esc(r.o.m.name)}" style="left:${(r.x-minx)/bw*100}%;top:${(r.y-miny)/bh*100}%;width:${r.w/bw*100}%;height:${r.h/bh*100}%">
+      <b>${esc(r.o.m.name)}</b><span>${esc([r.o.m.make,r.o.m.model].filter(Boolean).join(' ')||r.o.m.description||'')}</span><small>${r.o.cur.res==='preferred'?'авто':r.o.cur.res} · ${fmtRate(r.o.cur.warmRate&&D.warmDone?r.o.cur.warmRate:r.o.cur.rate)} Гц</small></div>`).join('');
+  const o=D.model.find(o=>o.m.name===SYS.dispSel)||D.model[0],c=o.cur,modes=modesOf(o.m),cur=modes.find(x=>x.res===c.res)||{rates:[c.rate]};
+  const rateSel=(id,val)=>`<select id="${id}">${cur.rates.map(r=>`<option value="${r}" ${Math.abs(r-val)<0.5?'selected':''}>${fmtRate(r)} Гц</option>`).join('')}${cur.rates.some(r=>Math.abs(r-val)<0.5)?'':`<option value="${val}" selected>${fmtRate(val)} Гц</option>`}</select>`;
+  const anyDirty=D.model.some(dirtyMon);
+  return `<div class="dmap" id="dmap" style="aspect-ratio:${bw}/${bh};max-width:min(100%,${Math.round(260*bw/bh)}px)">${boxes}</div>
+    <div class="dpanel">
+      <div class="dhead"><b>${esc(o.m.name)}</b> <span class="note">${esc(o.m.description||'')}</span>${o.e?'':' <span class="tag def" title="Этого монитора нет в таблице MON — после «Оставить» он туда добавится">не в конфиге</span>'}</div>
+      <div class="dgrid">
+        <label>Разрешение<select id="dRes">${c.res==='preferred'?'<option value="preferred" selected>Авто (preferred)</option>':''}${modes.map(x=>`<option value="${x.res}" ${x.res===c.res?'selected':''}>${x.res.replace('x','×')}</option>`).join('')}</select></label>
+        ${c.warmRate!=null?`<label>Частота при старте${rateSel('dRate',c.rate)}</label><label>После прогрева${rateSel('dWarm',c.warmRate)}</label>`:`<label>Частота${c.res==='preferred'?'<select disabled><option>авто</option></select>':rateSel('dRate',c.rate)}</label>`}
+        <label>Масштаб<select id="dScale">${[...new Set([...SCALES,c.scale])].sort((a,b)=>a-b).map(v=>`<option value="${v}" ${v===c.scale?'selected':''}>${Math.round(v*100)}%</option>`).join('')}</select></label>
+        <label>Поворот<select id="dRot">${ROT.map((r,i)=>`<option value="${i}" ${i===c.transform?'selected':''}>${r}</option>`).join('')}</select></label>
+        <label>Позиция<span class="mono dpos">${c.x} × ${c.y}</span></label>
+      </div>
+      ${c.warmRate!=null?`<div class="note">🔥 Прогрев: старт на ${fmtRate(c.rate)} Гц, через 3 минуты — ${fmtRate(c.warmRate)} Гц. ${D.warmDone?'Сейчас прогрев пройден — применится частота после прогрева.':'Прогрев ещё идёт — применится стартовая частота.'}</div>`:''}
+      ${tbl?'':`<div class="note err">В ${esc(D.host&&D.host.path||'host.lua')} нет таблицы <code>--@monitors</code> — расставить можно, но сохранить в конфиг нельзя. Обнови mors-dots.</div>`}
+      ${SYS.dispConfirm?`<div class="dconfirm">Оставить такие настройки? Вернётся через <b id="dCount">${SYS.dispConfirm.left}</b> с <button class="btn primary small" id="dKeep">Оставить</button><button class="btn small" id="dRevert">Вернуть</button></div>`
+        :`<div class="actions"><button class="btn primary" id="dApply" ${anyDirty?'':'disabled'}>Применить</button><button class="btn" id="dReset" ${anyDirty?'':'disabled'}>Сбросить</button><button class="btn" id="dReload">⟳ Перечитать</button></div>`}
+    </div>`;}
+function ruleOf(o,which='cur'){const c=o[which],D=SYS.disp,start=c.res==='preferred'?'preferred':`${c.res}@${fmtRate(c.rate)}`;
+  const live=c.warmRate!=null&&D.warmDone?`${c.res}@${fmtRate(c.warmRate)}`:start;
+  return {output:o.e?o.e.fields.output:(o.m.description?'desc:'+o.m.description:o.m.name),mode:live,start,warm:c.warmRate!=null?`${c.res}@${fmtRate(c.warmRate)}`:null,
+    position:`${c.x}x${c.y}`,scale:c.scale,transform:c.transform};}
+async function applyDisplays(rules){if(!rules.length)return;
+  for(const r of rules)termAdd(`$ hyprctl eval hl.monitor({ output = "${r.output}", mode = "${r.mode}", position = "${r.position}", scale = ${r.scale}${r.transform?', transform = '+r.transform:''} })`,'c');
+  if(BRIDGE){try{const res=await BRIDGE.call('applyMonitors',{rules});res.forEach(x=>termAdd(x.ok?`✓ ${x.output}`:`✗ ${x.output}: ${x.out}`,x.ok?'ok':'err'));}catch(e){termAdd('✗ '+e.message,'err');}}
+  else termAdd('(имитация)');}
+function hostTextWith(D){const tbl=parseMonTable(D.host.text);if(!tbl)return null;const lines=[...tbl.lines],add=[];
+  for(const o of D.model){if(!dirtyMon(o)&&o.e)continue;if(!dirtyMon(o))continue;const r=ruleOf(o);
+    const e=o.e?{...o.e,fields:{...o.e.fields},order:[...o.e.order]}:{indent:'    ',key:(o.m.name||'mon').toLowerCase().replace(/\W+/g,'_'),fields:{output:r.output},order:['output'],comment:''};
+    const set=(k,v)=>{e.fields[k]=v;if(!e.order.includes(k))e.order.push(k);};
+    set('mode',r.start);set('position',r.position);set('scale',r.scale);set('transform',r.transform);if(r.warm)set('warm',r.warm);
+    if(o.e)lines[o.e.line]=monLine(e);else add.push(monLine(e));}
+  lines.splice(tbl.b,0,...add);return lines.join('\n');}
+let dispTimer=null;
+function startConfirm(){SYS.dispConfirm={left:15};clearInterval(dispTimer);
+  dispTimer=setInterval(()=>{if(!SYS.dispConfirm)return clearInterval(dispTimer);SYS.dispConfirm.left--;const el=$('#dCount');if(el)el.textContent=SYS.dispConfirm.left;
+    if(SYS.dispConfirm.left<=0)revertDisplays(true);},1000);}
+async function keepDisplays(){clearInterval(dispTimer);SYS.dispConfirm=null;const D=SYS.disp,text=hostTextWith(D);
+  if(text==null){termAdd('! таблицы --@monitors нет — сохранено только до перезапуска','err');}
+  else if(BRIDGE){try{const r=await BRIDGE.call('writeHost',{text});termAdd(`✓ сохранено в ${D.host.path}${r&&r.backup?' · копия '+r.backup:''}`,'ok');}catch(e){termAdd('✗ '+e.message,'err');}}
+  else{D.host.text=text;termAdd('✓ сохранено (имитация)','ok');}
+  if(BRIDGE)await loadDisplays();else{SYS.disp.model=dispModel(SYS.disp);renderSystem();}}
+async function revertDisplays(auto){clearInterval(dispTimer);SYS.dispConfirm=null;const D=SYS.disp;
+  const rules=D.model.filter(dirtyMon).map(o=>ruleOf(o,'init'));D.model.forEach(o=>o.cur={...o.init});
+  termAdd(auto?'время вышло — возвращаю как было':'возвращаю как было');await applyDisplays(rules);renderSystem();}
+function bindDisplays(){const D=SYS.disp;if(!D||!D.model.length)return;const o=D.model.find(o=>o.m.name===SYS.dispSel)||D.model[0],c=o.cur;
+  const upd=()=>renderSystem();
+  $$('[data-dmon]').forEach(el=>{const name=el.dataset.dmon,ob=D.model.find(x=>x.m.name===name);
+    el.onpointerdown=ev=>{if(SYS.dispConfirm)return;ev.preventDefault();el.setPointerCapture(ev.pointerId);SYS.dispSel=name;
+      const map=$('#dmap').getBoundingClientRect(),sx=ev.clientX,sy=ev.clientY,x0=ob.cur.x,y0=ob.cur.y,me=logical(ob);let moved=false;
+      el.onpointermove=mv=>{const kk=map.width/SYS.dispBox.bw;let nx=Math.round(x0+(mv.clientX-sx)/kk),ny=Math.round(y0+(mv.clientY-sy)/kk);moved=true;
+        const th=60;for(const other of D.model){if(other===ob)continue;const L=logical(other),ox=other.cur.x,oy=other.cur.y;   // прилипание к краям соседей
+          for(const [a,b] of [[nx,ox+L.w],[nx+me.w,ox],[nx,ox],[nx+me.w,ox+L.w]])if(Math.abs(a-b)<th){nx+=b-a;break;}
+          for(const [a,b] of [[ny,oy],[ny+me.h,oy+L.h],[ny,oy+L.h],[ny+me.h,oy]])if(Math.abs(a-b)<th){ny+=b-a;break;}}
+        ob.cur.x=nx;ob.cur.y=ny;el.style.left=(nx-SYS.dispBox.minx)/SYS.dispBox.bw*100+'%';el.style.top=(ny-SYS.dispBox.miny)/SYS.dispBox.bh*100+'%';el.classList.add('dirty');};
+      el.onpointerup=()=>{el.onpointermove=null;if(moved){const mx=Math.min(...D.model.map(x=>x.cur.x)),my=Math.min(...D.model.map(x=>x.cur.y));   // без отрицательных координат
+        if(mx!==0||my!==0)D.model.forEach(x=>{x.cur.x-=mx;x.cur.y-=my;});}upd();};};});
+  const sel=(id,f)=>{const el=$(id);if(el)el.onchange=()=>{f(el.value);upd();};};
+  sel('#dRes',v=>{c.res=v;if(v!=='preferred'){const md=modesOf(o.m).find(x=>x.res===v);if(md){const near=r=>md.rates.reduce((a,b)=>Math.abs(b-r)<Math.abs(a-r)?b:a,md.rates[0]);c.rate=near(c.rate);if(c.warmRate!=null)c.warmRate=md.rates[0];}}});
+  sel('#dRate',v=>{c.rate=+v;});sel('#dWarm',v=>{c.warmRate=+v;});sel('#dScale',v=>{c.scale=+v;});sel('#dRot',v=>{c.transform=+v;});
+  const ap=$('#dApply');if(ap)ap.onclick=async()=>{await applyDisplays(D.model.filter(dirtyMon).map(o=>ruleOf(o)));startConfirm();renderSystem();};
+  const rs=$('#dReset');if(rs)rs.onclick=()=>{D.model.forEach(o=>o.cur={...o.init});upd();};
+  const rl=$('#dReload');if(rl)rl.onclick=loadDisplays;
+  const kp=$('#dKeep');if(kp)kp.onclick=keepDisplays;const rv=$('#dRevert');if(rv)rv.onclick=()=>revertDisplays(false);}
 function renderSystemZoom(){const el=$('#zoomSeg');if(!el)return;
   el.innerHTML=ZOOMS.map(z=>`<button class="${z===zoom?'on':''}" data-z="${z}">${z}%</button>`).join('')+`<input type="range" min="60" max="200" step="5" value="${zoom}" id="zoomR"><span class="zv">${zoom}%</span>`;
   el.querySelectorAll('[data-z]').forEach(b=>b.onclick=()=>applyZoom(+b.dataset.z));
