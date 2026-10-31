@@ -7,7 +7,7 @@
     "logo": {
         //@name: Тип логотипа | type: enum | options: auto, builtin, small, file, kitty, kitty-direct, sixel, chafa, none | desc: auto — картинка, если терминал умеет (kitty), иначе значок дистрибутива
         "type": "auto",
-        //@name: Картинки | type: string | desc: Путь или маска; при нескольких файлах fastfetch берёт случайный
+        //@name: Картинки | type: dir | glob: *.png, *.jpg, *.webp, * | desc: Папка с картинками; fastfetch берёт случайную из подходящих под маску
         "source": "~/.config/fastfetch/images/*.png",
         //@name: Высота логотипа | type: int | range: 5-40 | desc: В строках терминала
         "height": 15

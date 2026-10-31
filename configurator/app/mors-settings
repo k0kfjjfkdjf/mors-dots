@@ -411,9 +411,32 @@ class Backend:
     picker = None          # окно выбора файла на GTK — подставляет App (нужен главный поток)
     IMAGE_EXT = '*.png *.jpg *.jpeg *.webp *.gif *.bmp *.tif *.tiff'
 
-    def cmd_pickFile(self, kind='file', start=None, title=None, multiple=False):
-        """Системное окно выбора: kind = file | image | dir. Возвращает путь (или список) либо None."""
+    def cmd_pickFile(self, kind='file', start=None, title=None, multiple=False, filter=None, tilde=False):
+        """Системное окно выбора: kind = file | image | dir. Возвращает путь (или список) либо None.
+        filter — маски через пробел («*.png *.jpg»): в окне видны только такие файлы.
+        tilde — вернуть путь в домашней папке как ~/… (как было записано в конфиге)."""
+        res = self._pick(kind, start, title, multiple, filter)
+        if tilde and res:
+            fix = lambda x: '~' + x[len(str(HOME)):] if x == str(HOME) or x.startswith(str(HOME) + '/') else x
+            res = [fix(x) for x in res] if isinstance(res, list) else fix(res)
+        return res
+
+    def cmd_globInfo(self, pattern):
+        """Сколько файлов подходит под путь с маской (~/x/*.png) — для подсказки под полем."""
+        import glob as g
+        pat = os.path.expanduser(str(pattern or '').strip())
+        if not pat:
+            return {'count': 0, 'sample': [], 'dir': False}
+        if not g.has_magic(pat):
+            return {'count': 1 if os.path.exists(pat) else 0, 'sample': [os.path.basename(pat)], 'dir': os.path.isdir(pat)}
+        found = sorted(x for x in g.glob(pat) if os.path.isfile(x))
+        return {'count': len(found), 'sample': [os.path.basename(x) for x in found[:5]],
+                'dir': os.path.isdir(os.path.dirname(pat))}
+
+    def _pick(self, kind, start, title, multiple, filter):
         start = os.path.expanduser(start or '~')
+        if any(ch in start for ch in '*?['):               # путь с маской — открываем её папку
+            start = os.path.dirname(start)
         if not os.path.exists(start):
             start = os.path.dirname(start.rstrip('/')) or str(HOME)
             if not os.path.isdir(start):
@@ -424,22 +447,23 @@ class Backend:
                 cmd = ['kdialog', '--title', title, '--getexistingdirectory', start]
             else:
                 cmd = ['kdialog', '--title', title] + (['--multiple', '--separate-output'] if multiple else []) + \
-                      ['--getopenfilename', start] + ([f'Картинки ({self.IMAGE_EXT})'] if kind == 'image' else [])
+                      ['--getopenfilename', start] + ([f'Подходящие ({filter})'] if filter else
+                                                      [f'Картинки ({self.IMAGE_EXT})'] if kind == 'image' else [])
             p = subprocess.run(cmd, capture_output=True, text=True)
             if p.returncode != 0:
                 return None
             out = [l for l in p.stdout.splitlines() if l.strip()]
             return out if multiple else (out[0] if out else None)
         if self.picker:                                   # GTK / портал рабочего стола
-            return self.picker(kind, start, title, multiple)
+            return self.picker(kind, start, title, multiple, filter)
         if shutil.which('zenity'):
             cmd = ['zenity', '--file-selection', '--title', title, '--filename', start.rstrip('/') + '/']
             if kind == 'dir':
                 cmd.append('--directory')
             if multiple:
                 cmd += ['--multiple', '--separator', '\n']
-            if kind == 'image':
-                cmd += ['--file-filter', f'Картинки | {self.IMAGE_EXT}']
+            if filter or kind == 'image':
+                cmd += ['--file-filter', f'Подходящие | {filter}' if filter else f'Картинки | {self.IMAGE_EXT}']
             p = subprocess.run(cmd, capture_output=True, text=True)
             if p.returncode != 0:
                 return None
@@ -658,7 +682,7 @@ def main():
             threading.Thread(target=work, daemon=True).start()
 
         # ---- окно выбора файла GTK (через портал рабочего стола, если он есть)
-        def pick_gtk(self, kind, start, title, multiple):
+        def pick_gtk(self, kind, start, title, multiple, filter=None):
             done, box = threading.Event(), {}
 
             def show():
@@ -666,9 +690,9 @@ def main():
                 dlg = Gtk.FileChooserNative.new(title, self.win, action, 'Выбрать', 'Отмена')
                 dlg.set_select_multiple(bool(multiple))
                 dlg.set_current_folder(start if os.path.isdir(start) else os.path.dirname(start))
-                if kind == 'image':
-                    flt = Gtk.FileFilter(); flt.set_name('Картинки')
-                    for ext in Backend.IMAGE_EXT.split():
+                if filter or kind == 'image':
+                    flt = Gtk.FileFilter(); flt.set_name('Подходящие' if filter else 'Картинки')
+                    for ext in (filter or Backend.IMAGE_EXT).split():
                         flt.add_pattern(ext)
                     dlg.add_filter(flt)
                 if dlg.run() == Gtk.ResponseType.ACCEPT:

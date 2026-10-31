@@ -265,7 +265,10 @@ input[type=color]{width:34px;height:28px;border:1px solid var(--border);border-r
 .bad{border-color:var(--danger)!important;color:var(--danger)}
 .objta{width:250px;height:58px;background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:6px;padding:5px 8px;font-family:var(--mono);font-size:11px;resize:vertical;outline:none}
 .objta:focus{border-color:var(--accent)}
-.pathin{display:flex;align-items:center;gap:6px}
+.pathin{display:flex;align-items:center;gap:6px;flex-wrap:wrap;max-width:440px}
+.pathin select.glob{width:auto;min-width:70px;font-family:var(--mono)}
+.globinfo{flex-basis:100%;width:0;min-width:100%;font-size:11.5px;color:var(--muted);font-family:var(--mono);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.globinfo.bad{color:var(--mod)}
 @media (max-width:1250px){.hprow{grid-template-columns:1fr auto!important}.hprow .ctl{grid-column:1/-1;grid-row:2}.hpbtns{grid-row:1;grid-column:2}}
 
 /* side pane */
@@ -941,9 +944,26 @@ function sectionsHTML(pf,f){
   return {h,n:groups.size};
 }
 /* ---------- выбор файла и шрифта ---------- */
-async function pickPath(kind,start){
-  if(!BRIDGE){toast('В программе откроется окно выбора '+(kind==='dir'?'папки':'файла')+' KDE');return null;}
-  try{return await BRIDGE.call('pickFile',{kind,start:start||null});}catch(e){toast(e.message,true);return null;}}
+async function pickPath(kind,start,opts={}){
+  if(!BRIDGE){toast('В программе откроется окно выбора '+(kind==='dir'?'папки':'файла')+' KDE'+(opts.filter?` (видны только ${opts.filter})`:''));return null;}
+  try{return await BRIDGE.call('pickFile',{kind,start:start||null,filter:opts.filter||null,tilde:!start||String(start).startsWith('~')});}
+  catch(e){toast(e.message,true);return null;}}
+/* путь с маской: «~/pics/*.png» → папка + маска */
+const hasMagic=s=>/[*?[]/.test(s);
+function splitGlob(v){v=String(v||'');const i=v.lastIndexOf('/');const last=v.slice(i+1);
+  return hasMagic(last)?{dir:v.slice(0,Math.max(i,0)),pat:last}:{dir:v,pat:''};}
+const globList=m=>String(m.glob||'').split(',').map(x=>x.trim()).filter(Boolean);
+const pickFilter=m=>m.filter?m.filter.replace(/[,;]/g,' ').replace(/\s+/g,' ').trim():null;
+let globTimers={};
+async function showGlobInfo(g){const el=document.getElementById('gi-'+g),it=state.parsed&&state.parsed.items[g];if(!el||!it)return;
+  const v=String(it.value||'');
+  if(!BRIDGE){el.textContent=hasMagic(v)?`в программе здесь будет: сколько файлов подходит под ${splitGlob(v).pat}`:'';return;}
+  try{const r=await BRIDGE.call('globInfo',{pattern:v});
+    el.classList.toggle('bad',!r.count);
+    el.textContent=!hasMagic(v)?(r.count?(r.dir?'папка есть':'файл есть'):'⚠ такого пути нет')
+      :r.count?`подходит файлов: ${r.count} — ${r.sample.join(', ')}${r.count>r.sample.length?'…':''}`
+      :(r.dir?`⚠ в папке нет файлов ${splitGlob(v).pat}`:'⚠ такой папки нет');
+  }catch(e){el.textContent='';}}
 function hpObj(){try{return JSON.parse(hpCfg().files[0].text);}catch(e){return {};}}
 function hpSetKeys(kv){const c=hpCfg(),d=c.files[0],obj=JSON.parse(d.text);Object.assign(obj,kv);pushHistory('font',0);d.text=JSON.stringify(obj,null,2);
   if(cur===c){state.parsed=parseCur();renderHP();renderPane();renderTop();}renderSidebar();if(BRIDGE&&state.live)hpScheduleWrite();}
@@ -1090,7 +1110,12 @@ function controlHTML(it,g){
   if(t==='keybind'){const kb=parseKb(v);
     return `<span class="kb">${MODS.map(x=>`<button class="mod ${kb.mods.has(x)?'on':''}" data-role="kbmod" data-mod="${x}" ${d}>${x==='SUPER'&&kb.mainMod?'$mainMod':x}</button>`).join('')}<span class="plus">+</span><button class="keycap" data-role="kbcap" ${d} title="Нажми и введи клавишу">${esc(kb.key||'?')}</button></span>`;}
   if(t==='font')return `<button class="fontbtn" data-role="mfont" ${d} style="font-family:'${esc(v)}'" title="Выбрать шрифт">${esc(v)} <span>▾</span></button>`;
-  if(t==='file'||t==='image'||t==='dir')return `<span class="pathin"><input class="txt" type="text" value="${esc(v)}" data-role="text" ${d} spellcheck="false"><button class="btn small" data-role="mpick" data-kind="${t}" ${d}>📁 Выбрать…</button></span>`;
+  if(t==='file'||t==='image'||t==='dir'){const gl=t==='dir'?globList(m):[],sp=splitGlob(v);
+    const pats=gl.length>1||(gl.length&&sp.pat&&!gl.includes(sp.pat))?[...new Set([sp.pat||gl[0],...gl])]:[];
+    return `<span class="pathin"><input class="txt" type="text" value="${esc(v)}" data-role="text" ${d} spellcheck="false">`
+      +(pats.length?`<select class="glob" data-role="mglob" ${d} title="Какие файлы брать из папки">${pats.map(x=>`<option ${x===(sp.pat||gl[0])?'selected':''}>${esc(x)}</option>`).join('')}</select>`:'')
+      +`<button class="btn small" data-role="mpick" data-kind="${t}" ${d}>📁 ${gl.length?'Папка…':'Выбрать…'}</button>`
+      +(gl.length||m.filter||hasMagic(v)?`<span class="globinfo" id="gi-${g}"></span>`:'')+`</span>`;}
   return `<input class="txt" type="text" value="${esc(v)}" data-role="text" ${d}>`;
 }
 function bindForm(){
@@ -1108,9 +1133,15 @@ function bindForm(){
     if(role==='kbmod')el.addEventListener('click',()=>{const kb=parseKb(it().value),mods=new Set(kb.mods);const mm=el.dataset.mod;
       mods.has(mm)?mods.delete(mm):mods.add(mm);setValue(g,buildKb(kb,mods,kb.key),{rerender:true});checkConflict(g);});
     if(role==='mfont')el.addEventListener('click',()=>openFontPicker({family:it().value},fam=>setValue(g,fam,{rerender:true}),{noStyle:true}));
-    if(role==='mpick')el.addEventListener('click',async()=>{const p=await pickPath(el.dataset.kind,it().value);if(p)setValue(g,p,{rerender:true});});
+    if(role==='mpick')el.addEventListener('click',async()=>{const m=it().meta,gl=globList(m),v=String(it().value||'');
+      if(el.dataset.kind==='dir'&&gl.length){const sp=splitGlob(v),pat=sp.pat||gl[0];   // папка + маска из разметки
+        const p=await pickPath('dir',sp.dir||v||'~',{});if(p)setValue(g,p.replace(/\/$/,'')+'/'+pat,{rerender:true});return;}
+      const p=await pickPath(el.dataset.kind,v,{filter:pickFilter(m)});if(p)setValue(g,p,{rerender:true});});
+    if(role==='mglob')el.addEventListener('change',()=>{const sp=splitGlob(it().value);setValue(g,(sp.dir?sp.dir+'/':'')+el.value,{rerender:true});});
+    if(role==='text'&&document.getElementById('gi-'+g))el.addEventListener('input',()=>{clearTimeout(globTimers[g]);globTimers[g]=setTimeout(()=>showGlobInfo(g),400);});
     if(role==='kbcap')el.addEventListener('click',()=>{if(state.capturing)stopCapture();state.capturing={g,el};el.classList.add('capturing');el.textContent='…';});
   });
+  body.querySelectorAll('.globinfo').forEach(el=>showGlobInfo(+el.id.slice(3)));
   body.querySelectorAll('[data-goto]').forEach(el=>el.onclick=()=>gotoItem(+el.dataset.goto));
   body.querySelectorAll('[data-reset]').forEach(el=>el.onclick=()=>resetItem(+el.dataset.reset));
   body.querySelectorAll('[data-fold]').forEach(el=>el.onclick=()=>{const k=cur.name+':'+el.dataset.fold;
@@ -1219,7 +1250,8 @@ gaps_in = 5</pre>
   <tr><td><code>color</code></td><td>пипетка + прозрачность</td><td>rgba(), rgb(), 0xAARRGGBB, #hex</td></tr>
   <tr><td><code>keybind</code></td><td>модификаторы + захват клавиши</td><td>конфликты ищутся во всех файлах</td></tr>
   <tr><td><code>font</code></td><td>выбор шрифта из установленных</td><td>—</td></tr>
-  <tr><td><code>file</code> / <code>image</code> / <code>dir</code></td><td>поле + «Выбрать…»</td><td>окно выбора файлов KDE</td></tr>
+  <tr><td><code>file</code> / <code>image</code> / <code>dir</code></td><td>поле + «Выбрать…»</td><td>окно выбора файлов KDE; <code>filter: *.png *.jpg</code> — в окне только такие файлы</td></tr>
+  <tr><td><code>dir</code> + <code>glob</code></td><td>выбор папки, к ней дописывается маска</td><td><code>glob: *.png, *.jpg, *</code> — первая по умолчанию, остальные в списке; под полем — сколько файлов подходит</td></tr>
   <tr><td><code>block</code></td><td>переключатель целого блока <code>{…}</code> под строкой</td><td>выключено = блок закомментирован; модули fastfetch, waybar</td></tr>
   <tr><td><code>string</code></td><td>поле ввода</td><td>—</td></tr></table>
   <h3>С чего начинать разбор</h3>
