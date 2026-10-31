@@ -42,6 +42,7 @@ class Backend:
         self.log = log                      # потоковый вывод в «терминал» страницы «Система»
         self.last_hp_hash = None            # чтобы не принимать собственную запись за внешнюю
         self.backed_up = False
+        self.hypr_backed = set()             # резервная копия каждого файла Hyprland — раз за сеанс
 
     # ---------------------------------------------------------------- состояние
     def settings(self):
@@ -173,6 +174,67 @@ class Backend:
         subprocess.Popen([sys.executable, str(HERE / 'gear-redirect.py')], start_new_session=True,
                          stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
         return True
+
+    # ---------------------------------------------------------------- Hyprland (настоящие файлы)
+    def _hypr_root(self):
+        return (HOME / '.config/hypr').resolve()
+
+    def _hypr_allowed(self, real):
+        """Писать можно только в конфиг Hyprland и в hosts/ репозитория (туда ведёт lua/host.lua)."""
+        real = real.resolve()
+        roots = [self._hypr_root(), (DOTS / 'hosts').resolve()]
+        return real.suffix in ('.lua', '.conf') and any(real.is_relative_to(r) for r in roots)
+
+    def cmd_hyprland(self):
+        root = self._hypr_root()
+        main = root / 'hyprland.lua'
+        fmt = 'lua'
+        if not main.exists():
+            main, fmt = root / 'hyprland.conf', 'conf'
+        if not main.exists():
+            return {'files': []}
+        import re
+        order, seen = [], set()
+
+        def walk(path):
+            if path in seen or not path.exists():
+                return
+            seen.add(path); order.append(path)
+            text = path.read_text()
+            if fmt == 'lua':
+                for mod in re.findall(r'^\s*require\s*\(?\s*["\']([\w.]+)["\']\s*\)?\s*$', text, re.M):
+                    walk(root / (mod.replace('.', '/') + '.lua'))
+            else:
+                for src in re.findall(r'^\s*source\s*=\s*(.+?)\s*$', text, re.M):
+                    walk(pathlib.Path(os.path.expanduser(src)))
+        walk(main)
+        disp = lambda p: '~/.config/hypr/' + str(p.relative_to(root)) if p.is_relative_to(root) else str(p)
+        return {'format': fmt, 'files': [{'path': disp(p), 'text': p.read_text()} for p in order]}
+
+    def cmd_writeHypr(self, path, text, reload=False):
+        p = pathlib.Path(os.path.expanduser(path))
+        if not self._hypr_allowed(p):
+            raise PermissionError(f'запись вне конфига Hyprland запрещена: {path}')
+        real = p.resolve()                                 # host.lua — ссылка: пишем в настоящий файл
+        backup = None
+        if real.exists() and real not in self.hypr_backed:
+            bdir = CACHE_DIR / 'backups' / f'{datetime.datetime.now():%Y%m%d-%H%M%S}'
+            bdir.mkdir(parents=True, exist_ok=True)
+            shutil.copy2(real, bdir / real.name)
+            self.hypr_backed.add(real)
+            backup = f'~/.cache/mors-settings/backups/{bdir.name}/{real.name}'
+        real.parent.mkdir(parents=True, exist_ok=True)
+        tmp = real.with_name(real.name + '.mors-tmp')
+        tmp.write_text(text)
+        os.replace(tmp, real)
+        out = self.cmd_hyprReload() if reload else None
+        return {'backup': backup, 'reload': out}
+
+    def cmd_hyprReload(self):
+        if not shutil.which('hyprctl'):
+            return {'ok': False, 'out': 'нет hyprctl'}
+        code, out = run(['hyprctl', 'reload'], timeout=20)
+        return {'ok': code == 0, 'out': out}
 
     # ---------------------------------------------------------------- обои
     def _rice_mod(self):

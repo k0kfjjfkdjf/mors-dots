@@ -182,6 +182,7 @@ input[type=color]{width:34px;height:28px;border:1px solid var(--border);border-r
 .wp.cur{border-color:var(--accent);box-shadow:0 0 0 1px var(--accent)}
 .wp span{position:absolute;left:0;right:0;bottom:0;padding:3px 7px;font-size:10.5px;font-family:var(--mono);color:#fff;background:linear-gradient(transparent,rgba(0,0,0,.75));text-align:left;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .wp .badge2{position:absolute;top:6px;right:6px;font-size:10px;padding:1px 6px;border-radius:5px;background:var(--accent);color:var(--onaccent)}
+.roval{font-family:var(--mono);font-size:12px;color:var(--muted);background:var(--bg);border:1px dashed var(--border);border-radius:6px;padding:4px 8px;max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .pill{display:inline-flex;align-items:center;gap:6px;font-size:12px;padding:3px 9px;border-radius:20px;background:var(--bg);border:1px solid var(--border)}
 .pill i{width:7px;height:7px;border-radius:50%;background:var(--dim)}
 .pill.on i{background:var(--ok)}.pill.off i{background:var(--danger)}
@@ -457,9 +458,10 @@ const FORMATS={
   conf:{label:'ключ = значение (Hyprland, .conf)',comment:'#',sep:' = ',tail:'',src:/^\s*source\s*=\s*(.+?)\s*$/,re:/^(\s*)([^\s=#{}][^=]*?)(\s*=\s*)(.*?)(\s*)$/},
   space:{label:'ключ значение (kitty, i3)',comment:'#',sep:' ',tail:'',src:/^\s*include\s+(.+?)\s*$/,re:/^(\s*)([^\s#]+)(\s+)(.*?)(\s*)$/},
   ini:{label:'INI / TOML (foot, mako)',comment:'#',sep:' = ',tail:'',src:/^\s*include\s*=\s*(.+?)\s*$/,re:/^(\s*)([^\s=#;\[][^=]*?)(\s*=\s*)(.*?)(\s*)$/},
-  lua:{label:'Lua (hyprland.lua, nvim)',comment:'--',sep:' = ',tail:',',src:/^\s*(?:dofile|require)\s*\(?\s*["'](.+?)["']\s*\)?\s*$/,re:/^(\s*)([\w.]+)(\s*=\s*)(.*?)(,?\s*)$/}
+  lua:{label:'Lua (hyprland.lua, nvim)',comment:'--',sep:' = ',tail:',',src:/^\s*(?:dofile|require)\s*\(?\s*["'](.+?)["']\s*\)?\s*$/,re:/^(\s*)([\w.]+)(\s*=\s*)("(?:\\.|[^"\\])*"|'(?:\\.|[^'\\])*'|[^"',\s][^,]*?)(\s*,?\s*(?:--.*)?)$/}
 };
-const SRC_TPL={conf:p=>`source = ${p}`,space:p=>`include ${p}`,ini:p=>`include = ${p}`,lua:p=>`dofile("${p}")`};
+const SRC_TPL={conf:p=>`source = ${p}`,space:p=>`include ${p}`,ini:p=>`include = ${p}`,lua:p=>`require("${luaModule(p)}")`};
+const luaModule=p=>String(p).replace(/^.*?\/hypr\//,'').replace(/\.lua$/,'').replace(/\//g,'.');
 
 /* ---------- демо-данные: Hyprland из нескольких файлов ---------- */
 const H_MAIN=`# ~/.config/hypr/hyprland.conf — главный файл
@@ -650,7 +652,7 @@ function parseMarkup(cfg,d){
       if(cfg.start.mode==='between'&&E&&t===E){active=false;info[i]={kind:'marker'};pending=null;continue;}
     }
     if(cfg.format!=='space'&&(m=t.match(/^([\w.:\-]+)\s*(=\s*)?\{\s*$/))){stack.push(m[1]);if(!active)info[i]={kind:'out'};continue;}
-    if(/^\}\s*,?$/.test(t)){stack.pop();if(!active)info[i]={kind:'out'};continue;}
+    if(/^\}\s*\)?\s*,?$/.test(t)){stack.pop();if(!active)info[i]={kind:'out'};continue;}
     if(!active){info[i]={kind:'out'};continue;}
     if(t.startsWith(tag)){
       const body=t.slice(tag.length).trim();info[i]={kind:'ann'};
@@ -692,7 +694,9 @@ function parseCur(){
 const fileTitle=fi=>(state.parsed.files[fi]&&state.parsed.files[fi].title)||base(cur.files[fi].path);
 const dirtyDoc=d=>d.text!==d.saved;
 const dirtyCfg=c=>c.files.some(dirtyDoc);
-function findFileByTarget(t){const b=base(t);return cur.files.findIndex(d=>d.path===t||base(d.path)===b);}
+function findFileByTarget(t){
+  if(cur.format==='lua'&&!/[\/]/.test(t)&&!/\.lua$/.test(t)){const rel=t.replace(/\./g,'/')+'.lua';return cur.files.findIndex(d=>d.path.endsWith('/'+rel));}
+  const b=base(t);return cur.files.findIndex(d=>d.path===t||base(d.path)===b);}
 
 /* ---------- значения ---------- */
 const isTrue=v=>/^(true|yes|on|1)$/i.test(String(v).trim());
@@ -738,6 +742,7 @@ function setValue(g,nv,opts={}){
   state.parsed=parseCur();state.file=it.fi;
   if(opts.rerender)renderForm();else markRows();
   if(cur.hp){hpMarkRow(g);if(BRIDGE&&state.live)hpScheduleWrite();}
+  if(cur.real&&state.live)realScheduleWrite();
   renderChips();renderPane(state.parsed.items[g].line);renderTop();renderSidebar();livePreview(state.parsed.items[g],nv);
 }
 function savedValue(it){const d=cur.files[it.fi];let s;try{s=(d._sp&&d._sp.t===d.saved)?d._sp.o:(d._sp={t:d.saved,o:JSON.parse(d.saved)}).o;}catch(e){return undefined;}
@@ -756,11 +761,14 @@ function diffLines(d){const a=d.text.split('\n'),b=d.saved.split('\n');let n=0;f
 function resetItem(g){const it=state.parsed.items[g],d=cur.files[it.fi];pushHistory('r',it.fi);
   if(cur.mode==='adapter'){const obj=JSON.parse(d.text),s=JSON.parse(d.saved);if(it.key in s)obj[it.key]=s[it.key];else delete obj[it.key];d.text=JSON.stringify(obj,null,2);}
   else{const l=d.text.split('\n');l[it.line]=d.saved.split('\n')[it.line];d.text=l.join('\n');}
-  state.parsed=parseCur();state.file=it.fi;renderAll(it.line);toast('Значение возвращено к сохранённому');}
+  state.parsed=parseCur();state.file=it.fi;renderAll(it.line);toast('Значение возвращено к сохранённому');
+  if(cur.real&&state.live)realScheduleWrite();}
 function undo(){const e=cur.history.pop();if(!e){toast('Нечего отменять');return;}
-  cur.files[e.fi].text=e.text;state.lastPush={};state.file=e.fi;state.parsed=parseCur();renderAll();toast(`Отменено · ${base(cur.files[e.fi].path)}`);}
+  cur.files[e.fi].text=e.text;state.lastPush={};state.file=e.fi;state.parsed=parseCur();renderAll();toast(`Отменено · ${base(cur.files[e.fi].path)}`);
+  if(cur.real&&state.live)realScheduleWrite();}
 function save(){const ch=cur.files.filter(dirtyDoc);if(!ch.length)return;
   if(BRIDGE&&cur.hp){hpWriteNow(true);return;}
+  if(cur.real){realWriteNow(true);return;}
   ch.forEach(d=>d.saved=d.text);cur.history=[];renderAll();
   toast(`Сохранено: ${ch.map(d=>base(d.path)).join(', ')} · резервные копии *.bak`);
   if(cur.live&&state.live)addLog(null,null,'Hyprland перечитал конфиг автоматически');}
@@ -772,6 +780,7 @@ function revert(){const ch=cur.files.map((d,fi)=>[d,fi]).filter(([d])=>dirtyDoc(
 function addLog(key,cmd,note){const ts=new Date().toTimeString().slice(0,8);const last=state.log[state.log.length-1];
   if(key&&last&&last.key===key)state.log.pop();state.log.push({key,ts,cmd,note});if(state.log.length>60)state.log.shift();renderLog();}
 function livePreview(it,v){if(!state.live||!cur.live||!it)return;
+  if(cur.real)return;     // настоящие файлы: в журнал пишет realWriteNow
   if(it.meta.type==='keybind')addLog('kb','hyprctl reload','бинды применятся после перечитки');
   else addLog(it.path,`hyprctl keyword ${it.path} ${v}`);}
 function renderLog(){const el=$('#log');let h='<div class="hd">Журнал применения</div>';
@@ -784,7 +793,7 @@ function renderLog(){const el=$('#log');let h='<div class="hd">Журнал пр
 /* ---------- отрисовка ---------- */
 function renderSidebar(){
   $('#cfglist').innerHTML=configs.map((c,i)=>{
-    let h=`<button class="cfg ${c===cur&&state.view!=='system'?'active':''} ${BRIDGE&&!c.hp?'democfg':''}" data-i="${i}" ${BRIDGE&&!c.hp?'title="Демо-данные: этот конфиг пока не подключён к настоящим файлам"':''}>
+    let h=`<button class="cfg ${c===cur&&state.view!=='system'?'active':''} ${BRIDGE&&!c.hp&&!c.real?'democfg':''}" data-i="${i}" ${BRIDGE&&!c.hp&&!c.real?'title="Демо-данные: этот конфиг пока не подключён к настоящим файлам"':''}>
       <div class="meta"><div>${esc(c.name)}</div><div>${c.files.length>1?`${c.files.length} файлов · `:''}${esc(c.files[0].path)}</div></div>
       ${dirtyCfg(c)?'<span class="dot" title="Есть несохранённые изменения"></span>':''}
       <span class="badge ${c.mode==='adapter'?'adapter':''}">${c.mode==='adapter'?'адаптер':esc(c.comment+c.marker)}</span></button>`;
@@ -816,7 +825,7 @@ function renderTop(){
   st.innerHTML=n?`<span class="dot"></span>Изменено строк: ${n}${cur.files.length>1?` · файлов: ${ch.length}`:''}`:'✓ Сохранено';
   $('#saveBtn').disabled=!n;$('#revertBtn').disabled=!n;$('#undoBtn').disabled=!cur.history.length;
   const lw=$('#liveWrap');lw.classList.toggle('off',!cur.live);$('#liveToggle').disabled=!cur.live;
-  lw.title=cur.live==='file'?'Каждое изменение сразу пишется в config.json — HyprPanel применяет его сам':cur.live?'Изменения сразу применяются через hyprctl, файл пишется только при сохранении':(cur.liveNote||'');
+  lw.title=cur.real?'Каждое изменение сразу пишется в файл, затем hyprctl reload':cur.live==='file'?'Каждое изменение сразу пишется в config.json — HyprPanel применяет его сам':cur.live?'Изменения сразу применяются через hyprctl, файл пишется только при сохранении':(cur.liveNote||'');
 }
 function startLabel(){const s=cur.start;
   if(s.mode==='marker')return `после <code>${esc(s.begin)}</code>`;
@@ -938,8 +947,10 @@ function rowHTML(g){
       <span class="key" data-goto="${g}" title="Показать в файле">${esc(it.path)}${esc(where)}</span></div>
     <div class="ctl">${controlHTML(it,g)}<button class="reset" data-reset="${g}" title="Вернуть сохранённое значение">↺</button></div></div>`;
 }
+const luaLiteral=it=>!!it.quoted||/^(-?\d+(\.\d+)?|true|false)$/.test(String(it.value).trim());
 function controlHTML(it,g){
   const m=it.meta,v=String(it.value??''),t=(m.type||'string').toLowerCase(),d=`data-idx="${g}"`;
+  if(cur.format==='lua'&&!luaLiteral(it))return `<code class="roval" title="Это выражение, а не значение — его задаёт тема rice или код">${esc(v)}</code><span class="tag rice">${/^t\./.test(v)?'из темы':'выражение'}</span>`;
   if(t==='int'||t==='float'){const [mn,mx]=parseRange(m.range,t),st=m.step||(t==='int'?1:0.1);
     return `<input type="range" min="${mn}" max="${mx}" step="${st}" value="${esc(v)}" data-role="range" ${d}><input class="num" type="number" min="${mn}" max="${mx}" step="${st}" value="${esc(v)}" data-role="num" ${d}>`;}
   if(t==='bool')return `<label class="switch"><input type="checkbox" ${isTrue(v)?'checked':''} data-role="bool" ${d}><span></span></label>`;
@@ -1033,7 +1044,7 @@ function renderPane(flash=null,block='nearest'){
     if(!ta||+ta.dataset.fi!==fi||ta.dataset.cfg!==cur.name){
       pane.innerHTML=`<div class="rawhint">Правишь <code>${esc(base(d.path))}</code> — форма слева перестраивается на лету.</div><textarea class="raw" id="rawta" spellcheck="false"></textarea>`;ta=$('#rawta');
       ta.dataset.fi=fi;ta.dataset.cfg=cur.name;
-      ta.addEventListener('input',()=>{clearTimeout(rawTimer);rawTimer=setTimeout(()=>{const f=+ta.dataset.fi;pushHistory('raw'+f,f);cur.files[f].text=ta.value;state.parsed=parseCur();renderForm();renderTop();renderSidebar();renderChips();},250);});
+      ta.addEventListener('input',()=>{clearTimeout(rawTimer);rawTimer=setTimeout(()=>{const f=+ta.dataset.fi;pushHistory('raw'+f,f);cur.files[f].text=ta.value;state.parsed=parseCur();renderForm();renderTop();renderSidebar();renderChips();if(cur.real&&state.live)realScheduleWrite();},250);});
       ta.addEventListener('keydown',e=>{if(e.key==='Tab'){e.preventDefault();ta.setRangeText('    ',ta.selectionStart,ta.selectionEnd,'end');ta.dispatchEvent(new Event('input'));}});
       ta.value=d.text;
     }else if(document.activeElement!==ta)ta.value=d.text;
@@ -1185,6 +1196,7 @@ async function bootBridge(){
     SYS.dots=st.dots;SYS.repo=st.repo;SYS.gear=st.gear;
     const c=hpCfg();c.live='file';c.liveNote='';
     if(st.hyprpanel&&st.hyprpanel.text!=null)hpLoadText(st.hyprpanel.text,st.hyprpanel.path);
+    await loadRealHyprland();
     if(st.zoom)applyZoom(st.zoom,false);
     if(st.theme&&RICE.themes[st.theme])applyTheme(st.theme);
     if(st.open==='system')openSystem();
@@ -1197,6 +1209,27 @@ function onBridgeEvent(ev){
   if(ev.type==='open'&&ev.page==='system')openSystem();
   if(ev.type==='log'){termAdd(ev.text,ev.kind);}
 }
+/* ---------- настоящий Hyprland (Lua) ---------- */
+async function loadRealHyprland(){
+  let r;try{r=await BRIDGE.call('hyprland');}catch(e){toast('Не прочитал конфиг Hyprland: '+e.message,true);return;}
+  if(!r||!r.files||!r.files.length)return;
+  const c=configs[0];
+  Object.assign(c,{real:true,format:r.format||'lua',comment:r.format==='conf'?'#':'--',marker:'@',follow:true,
+    start:{mode:'all',begin:'',end:''},live:'file',liveNote:'',history:[],files:r.files.map(f=>doc(f.path,f.text))});
+  c.files.forEach((d,fi)=>{if(!/--@|#@/.test(d.text))state.collapsed.add(c.name+':'+fi);});   // файлы без разметки — свёрнуты
+  if(cur===c){state.file=0;state.parsed=parseCur();}
+}
+let realTimer=null;
+function realScheduleWrite(){clearTimeout(realTimer);realTimer=setTimeout(()=>realWriteNow(false),600);}
+async function realWriteNow(manual){clearTimeout(realTimer);const c=configs.find(x=>x.real);if(!c)return;
+  const ch=c.files.filter(dirtyDoc);if(!ch.length)return;
+  try{let reload=null;
+    for(const d of ch){const text=d.text;const r=await BRIDGE.call('writeHypr',{path:d.path,text,reload:false});d.saved=text;
+      addLog('w:'+d.path,null,`${base(d.path)} записан${r&&r.backup?' · копия '+r.backup:''}`);}
+    reload=await BRIDGE.call('hyprReload');
+    addLog('reload','hyprctl reload',reload&&reload.ok?'Hyprland применил':'ошибка: '+(reload&&reload.out||''));
+    if(cur===c){markRows();renderTop();renderPane();}renderSidebar();if(manual)toast('Сохранено');}
+  catch(e){toast('Не удалось записать: '+e.message,true);}}
 let hpTimer=null;
 function hpScheduleWrite(){clearTimeout(hpTimer);hpTimer=setTimeout(()=>hpWriteNow(false),350);}
 async function hpWriteNow(manual){clearTimeout(hpTimer);const c=hpCfg(),d=c.files[0],text=d.text;
