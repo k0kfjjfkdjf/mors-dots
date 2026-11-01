@@ -19,6 +19,13 @@ sudo pacman -S --needed webkit2gtk-4.1          # окно на GTK + WebKit
 xdg-open ~/mors-dots/configurator/prototype/configurator.html
 ```
 
+## Значок и меню приложений
+
+При запуске программа сама кладёт `io.github.k0kfjjfkdjf.MorsSettings.desktop` в `~/.local/share/applications`
+и значок в `~/.local/share/icons` — «Настройки райса» появляются в rofi (drun) и любом меню приложений,
+с быстрыми пунктами «Система», «Скрипты», «Форматы». Вручную: `mors-settings --install` / `--uninstall`.
+Открыть сразу страницу: `mors-settings --system`, `--scripts`, `--formats`.
+
 ## Шестерёнка в HyprPanel
 
 Кнопка 󰒓 в панели управления (аватарка слева вверху) зашита в код HyprPanel и открывает
@@ -72,6 +79,18 @@ xdg-open ~/mors-dots/configurator/prototype/configurator.html
   на примере: что программа поймёт в каждой строке и не изменит ли запись строку. Если части строки
   не склеиваются обратно ровно в неё, программа такую строку не трогает. Свои форматы хранятся в
   `~/.config/mors-settings/settings.json` и появляются в списке «Формат строк» у конфигов.
+  «Экспорт» / «Импорт…» — описание формата текстом (JSON), чтобы перенести его на другую машину.
+- **Скрипты и кнопки.** Страница «Скрипты»: наборы кнопок для своих скриптов и демонов. У набора —
+  общая команда (`~/bin/mydaemon`) и кнопки-алиасы (`start`, `stop`, `restart`…), необязательная команда
+  статуса (код 0 — зелёный) и галочки «спросить» и «в терминале» (для интерактивных). Быстро добавить:
+  `Запустить=start; Остановить=stop`. «Из алиасов fish…» превращает алиасы fish в кнопки. Вывод идёт
+  в окно, процесс можно остановить. Хранится в `~/.config/mors-settings/settings.json` (`scripts`).
+  Кнопка прямо среди настроек конфига — разметка `type: action | run: команда` (`label:`, `confirm:`,
+  `term: yes`, `{file}` / `{dir}` — этот файл и его папка); пример — «Запустить fastfetch» в его конфиге.
+- **rofi.** Встроенный формат `rasi` и разметка `config/rofi/config.rasi`: режимы, значки, окно, список,
+  пункты. `colors.rasi` подтягивается через `@import`, но его пишет rice.py — цвета правь в теме.
+- **Узкое окно.** Уже 1250 px текст файла уходит в шторку («📄 Файл»), уже 860 px меню — в шторку (☰):
+  удобно на половине экрана.
 - **Конфиг из нескольких файлов.** Подключения (`source =`, `include`, `require`) становятся
   разделами; файл можно добавить вручную. Конфликты биндов ищутся по всем файлам.
 - **HyprPanel на русском.** Полная копия его окна настроек: 871 настройка, 26 страниц,
@@ -103,7 +122,8 @@ xdg-open ~/mors-dots/configurator/prototype/configurator.html
 configurator/
 ├── app/
 │   ├── mors-settings           окно GTK + WebKit: интерфейс + мост к rice.py, git, config.json
-│   └── gear-redirect.py        шестерёнка HyprPanel → mors-settings
+│   ├── gear-redirect.py        шестерёнка HyprPanel → mors-settings
+│   └── share/                  .desktop и значок (программа ставит их сама)
 ├── prototype/
 │   ├── configurator.src.html   исходник интерфейса (данные подставляет build.py)
 │   └── configurator.html       собранный прототип — его и открывать

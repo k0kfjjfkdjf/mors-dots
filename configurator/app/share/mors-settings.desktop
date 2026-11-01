@@ -1,0 +1,28 @@
+[Desktop Entry]
+Type=Application
+Name=Настройки райса
+Name[en]=Mors Settings
+GenericName=Конфигуратор
+GenericName[en]=Configurator
+Comment=Hyprland, HyprPanel, kitty, fastfetch, rofi, темы, мониторы, обои и свои скрипты
+Comment[en]=Settings for the mors-dots rice: configs, themes, monitors, wallpapers, scripts
+Exec=@EXEC@
+Icon=io.github.k0kfjjfkdjf.MorsSettings
+Terminal=false
+Categories=Settings;System;Utility;
+Keywords=hyprland;hyprpanel;rice;config;settings;theme;настройки;конфиг;тема;райс;
+StartupNotify=true
+StartupWMClass=io.github.k0kfjjfkdjf.MorsSettings
+Actions=system;scripts;formats;
+
+[Desktop Action system]
+Name=Система: тема, мониторы, обои
+Exec=@EXEC@ --system
+
+[Desktop Action scripts]
+Name=Скрипты
+Exec=@EXEC@ --scripts
+
+[Desktop Action formats]
+Name=Форматы конфигов
+Exec=@EXEC@ --formats

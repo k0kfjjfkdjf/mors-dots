@@ -70,7 +70,8 @@ js = lambda o: json.dumps(o, ensure_ascii=False, separators=(',', ':')).replace(
 html = (HERE / 'prototype/configurator.src.html').read_text()
 fastfetch = (RICE.parent / 'config/fastfetch/config.jsonc').read_text(encoding='utf-8')   # демо — настоящий файл из репо
 for ph, data in (('/*HP_DATA*/null', {'pages': pages, 'opts': opts, 'user': user}), ('/*RICE_DATA*/null', rice_data),
-                 ('/*FASTFETCH_DATA*/null', fastfetch)):
+                 ('/*FASTFETCH_DATA*/null', fastfetch),
+                 ('/*ROFI_DATA*/null', (RICE.parent / 'config/rofi/config.rasi').read_text(encoding='utf-8'))):
     assert ph in html, ph
     html = html.replace(ph, js(data))
 pathlib.Path(args.out).write_text(html)

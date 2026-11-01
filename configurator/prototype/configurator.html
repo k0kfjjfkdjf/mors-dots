@@ -144,6 +144,21 @@ input[type=color]{width:34px;height:28px;border:1px solid var(--border);border-r
 .sysbtn small{display:block;font-weight:400;color:var(--muted);font-size:11px}
 .sysview{flex:1;overflow:auto;padding:20px;min-height:0}
 .sysview[hidden],.content[hidden]{display:none!important}
+/* страница «Скрипты» */
+.scrgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;align-items:start}
+.scrbtns{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
+.scrbtns .btn{display:inline-flex;gap:6px;align-items:center}
+.scrstat{font-size:12px;font-family:var(--mono);color:var(--muted);display:flex;gap:8px;align-items:center;margin-top:6px}
+.scrstat .dotx{width:8px;height:8px;border-radius:50%;background:var(--dim)}.scrstat.ok .dotx{background:var(--ok)}.scrstat.bad .dotx{background:var(--danger)}
+.scrcmd{font-family:var(--mono);font-size:11.5px;color:var(--dim);margin-top:4px;word-break:break-all}
+.scrrows{display:flex;flex-direction:column;gap:6px;margin:8px 0}
+.scrrow{display:grid;grid-template-columns:minmax(90px,1fr) minmax(140px,2fr) auto auto auto;gap:6px;align-items:center}
+.scrrow input[type=text]{background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:6px 9px;font:inherit;font-size:12.5px;outline:none;min-width:0}
+.scrrow input.mono{font-family:var(--mono)}
+.scrrow label{font-size:11.5px;color:var(--muted);display:flex;gap:4px;align-items:center;white-space:nowrap}
+.scrout{background:var(--bg);border:1px solid var(--border);border-radius:8px;font-family:var(--mono);font-size:12px;padding:10px 12px;max-height:320px;overflow:auto;white-space:pre-wrap;word-break:break-word}
+.scrout .c{color:var(--accent)}.scrout .ok{color:var(--ok)}.scrout .err{color:var(--danger)}
+@media (max-width:860px){.scrrow{grid-template-columns:1fr 1fr}.scrrow label,.scrrow .btn{grid-column:auto}}
 /* страница «Форматы» */
 .fmtpage{display:grid;grid-template-columns:230px minmax(0,1fr);gap:16px;align-items:start}
 .fmtlist{display:flex;flex-direction:column;gap:4px;position:sticky;top:0}
@@ -375,15 +390,27 @@ textarea.raw{display:block;width:100%;height:calc(100% - 36px);min-height:300px;
 .toast.warn{border-color:color-mix(in srgb,var(--mod) 45%,var(--panel));color:var(--mod)}
 
 @media (max-width:1250px){.row{grid-template-columns:1fr}.ctl{justify-content:flex-start}}
-@media (max-width:900px){
-  .app{grid-template-columns:1fr;height:auto}
-  aside{flex-direction:row;overflow-x:auto;padding:8px;border-right:none;border-bottom:1px solid var(--border);align-items:flex-start}
-  .brand,.navlabel,.sidefoot,.subfiles{display:none}
-  .cfg{width:auto;flex:none}
-  main{height:auto}
-  .content{grid-template-columns:1fr}
+/* узкое окно (пол-экрана в Hyprland): файл — шторкой справа, меню — шторкой слева */
+.navbtn,.panebtn{display:none}
+.drawer-bg{display:none}
+@media (max-width:1250px){
+  .panebtn{display:inline-flex}
+  .content{grid-template-columns:minmax(0,1fr)}
   .form{border-right:none}
-  .side{height:70vh;border-top:1px solid var(--border)}
+  .content .side{position:fixed;top:0;right:0;bottom:0;width:min(600px,94vw);z-index:60;background:var(--panel);border-left:1px solid var(--border);
+    box-shadow:-12px 0 40px #0007;transform:translateX(105%);transition:transform .22s ease;height:calc(100vh / var(--z,1))}
+  .app.showpane .content .side{transform:none}
+  .app.showpane .drawer-bg,.app.shownav .drawer-bg{display:block;position:fixed;inset:0;z-index:55;background:#0006}
+}
+@media (max-width:860px){
+  .navbtn{display:inline-flex}
+  .app{grid-template-columns:minmax(0,1fr)}
+  aside{position:fixed;top:0;left:0;bottom:0;width:min(290px,86vw);z-index:60;transform:translateX(-105%);transition:transform .22s ease;box-shadow:12px 0 40px #0007}
+  .app.shownav aside{transform:none}
+  .topbar{padding:8px 10px;gap:8px}
+  .topbar .title .path{display:none}
+  .livewrap{font-size:0;gap:0}
+  .sysview{padding:12px}
   .grid2{grid-template-columns:1fr}
   .filehead{position:static}
 }
@@ -427,9 +454,11 @@ input::placeholder,textarea::placeholder{color:var(--dim)}
 </head>
 <body>
 <div class="app">
+  <div class="drawer-bg" id="drawerBg"></div>
   <aside>
     <div class="brand"><div class="logo">#@</div><div><b>Конфигуратор</b><small id="brandSub">прототип интерфейса</small></div></div>
     <button class="sysbtn" id="sysBtn"><span class="ic">⚙</span><span>Система<small>тема · масштаб · обновление</small></span></button>
+    <button class="sysbtn" id="scrBtn"><span class="ic">▶</span><span>Скрипты<small>свои кнопки · демоны · алиасы</small></span></button>
     <button class="sysbtn" id="fmtBtn"><span class="ic">{ }</span><span>Форматы<small>как читать конфиги · свои правила</small></span></button>
     <div class="navlabel">Конфиги</div>
     <div id="cfglist"></div>
@@ -439,6 +468,7 @@ input::placeholder,textarea::placeholder{color:var(--dim)}
 
   <main>
     <div class="topbar">
+      <button class="btn navbtn" id="navBtn" title="Меню">☰</button>
       <div class="title"><h1 id="tName"></h1><div class="path" id="tPath"></div></div>
       <div class="spacer"></div>
       <span class="modebadge" id="modeBadge"></span>
@@ -447,9 +477,11 @@ input::placeholder,textarea::placeholder{color:var(--dim)}
       <button class="btn" id="undoBtn" title="Отменить (Ctrl+Z)">↶</button>
       <button class="btn" id="revertBtn">Откатить</button>
       <button class="btn primary" id="saveBtn">Сохранить</button>
+      <button class="btn panebtn" id="paneBtn" title="Текст файла, разметка, шпаргалка">📄 Файл</button>
     </div>
     <div class="sysview" id="sysview" hidden></div>
     <div class="sysview" id="fmtview" hidden></div>
+    <div class="sysview" id="scrview" hidden></div>
     <div class="content" id="content">
       <div class="form" id="form">
         <input class="search" id="search" placeholder="Поиск по всем файлам конфига…  ( / )">
@@ -568,7 +600,10 @@ const FMT_BUILTIN={
     sample:'require("lua.theme")\nhl.config({\n  general = {\n    gaps_in = 5,\n    layout = "dwindle",   -- или master\n  },\n})'},
   jsonc:{label:'JSON / JSONC (fastfetch, waybar)',comment:'//',sep:': ',tail:',',re:/^(\s*)("(?:\\.|[^"\\])*")(\s*:\s*)("(?:\\.|[^"\\])*"|[^",\s{\[][^,]*?)(\s*,?\s*(?:\/\/.*)?)$/,quote:'json',
     nest:'brackets',join:'.',src:'',srcTpl:'',check:'json',
-    sample:'{\n  "logo": {\n    "type": "auto",   // или kitty\n    "height": 15\n  },\n  "modules": ["break"]\n}'}
+    sample:'{\n  "logo": {\n    "type": "auto",   // или kitty\n    "height": 15\n  },\n  "modules": ["break"]\n}'},
+  rasi:{label:'rofi (rasi)',comment:'//',sep:': ',tail:';',re:/^(\s*)([\w-]+)(\s*:\s*)(.*?)(\s*;\s*)$/,quote:'auto',
+    nest:'lines',open:/^([^{}:;]+?)\s*\{\s*$/,close:/^\}\s*$/,join:' › ',src:/^\s*@import\s+"([^"]+)"/,srcTpl:'@import "{path}"',check:'',
+    sample:'@import "colors.rasi"\nwindow {\n    width:     400px;\n    location:  west;\n}\nelement selected {\n    background-color: var(primary);\n}'}
 };
 let USER_FORMATS={};
 const FORMATS={};
@@ -738,7 +773,8 @@ const HP={"pages":[{"tab":"config","id":"General","ru":"Общие"},{"tab":"con
    (inotify / Gio.FileMonitor). rice.py apply пишет туда имя темы — программа перекрашивается сама.
    В прототипе файлы недоступны, поэтому темы встроены, а смену имитируют кнопки. */
 const RICE={"current":"sakura","themes":{"aurora":{"name":"Aurora","description":"Северное сияние: тёмно-синий, сине-фиолетовый, зелёный, белый, градиенты","palette":{"crust":"#070a1a","mantle":"#0a0e22","base":"#0d1229","base2":"#111733","surface0":"#18203f","surface1":"#222b52","surface2":"#2e3866","overlay0":"#4a5585","overlay1":"#6470a0","overlay2":"#8590bd","subtext0":"#aeb6dc","subtext1":"#cdd3f0","text":"#eef1ff","rosewater":"#f0e6ff","flamingo":"#e0b8ff","pink":"#d58cff","mauve":"#a77bff","red":"#ff6b8b","maroon":"#ff8fa8","peach":"#ffb38a","yellow":"#ffe08a","green":"#5cf2a6","teal":"#3fe0c8","sky":"#6fd3ff","sapphire":"#4fa8ff","blue":"#5c7cff","lavender":"#9aa8ff"},"accent":{"primary":"lavender","secondary":"mauve","tertiary":"green"},"border":["#5c7cffee","#a77bffee","#5cf2a6ee"]},"mono":{"name":"Mono","description":"Чёрно-бело-серая: графит, белый текст, без цвета","palette":{"crust":"#080808","mantle":"#0e0e0e","base":"#141414","base2":"#1a1a1a","surface0":"#222222","surface1":"#2e2e2e","surface2":"#3b3b3b","overlay0":"#5a5a5a","overlay1":"#727272","overlay2":"#8c8c8c","subtext0":"#a9a9a9","subtext1":"#c6c6c6","text":"#ededed","rosewater":"#f2f2f2","flamingo":"#d9d9d9","pink":"#cfcfcf","mauve":"#bdbdbd","red":"#d98c8c","maroon":"#c4a0a0","peach":"#d0d0d0","yellow":"#e3e3e3","green":"#b8b8b8","teal":"#a6a6a6","sky":"#dedede","sapphire":"#c2c2c2","blue":"#f5f5f5","lavender":"#ffffff"},"accent":{"primary":"lavender","secondary":"subtext1","tertiary":"overlay2"},"border":["#ffffffee","#6e6e6eee"]},"sakura":{"name":"Sakura","description":"Тёмная пастельно-розовая: слива, розовый, белый","palette":{"crust":"#120d11","mantle":"#171116","base":"#1c151b","base2":"#221a21","surface0":"#2c222b","surface1":"#3a2d38","surface2":"#4a3a47","overlay0":"#6b5868","overlay1":"#85707f","overlay2":"#a08a99","subtext0":"#c7b3bf","subtext1":"#e0cfd8","text":"#f7ecf2","rosewater":"#ffe4ec","flamingo":"#f9c6d3","pink":"#f5a9c8","mauve":"#e3b3e8","red":"#f2849e","maroon":"#e89aab","peach":"#f7b9a1","yellow":"#f6dcb0","green":"#b8e3c4","teal":"#a8dcd5","sky":"#b9d8f0","sapphire":"#a7c4e8","blue":"#c3b8f0","lavender":"#f8c8dc"},"accent":{"primary":"pink","secondary":"mauve","tertiary":"rosewater"},"border":["#f5a9c8ee","#e3b3e8ee"]}},"mocha":{"rosewater":"#f5e0dc","flamingo":"#f2cdcd","pink":"#f5c2e7","mauve":"#cba6f7","red":"#f38ba8","maroon":"#eba0ac","peach":"#fab387","yellow":"#f9e2af","green":"#a6e3a1","teal":"#94e2d5","sky":"#89dceb","sapphire":"#74c7ec","blue":"#89b4fa","lavender":"#b4befe","text":"#cdd6f4","subtext1":"#bac2de","subtext0":"#a6adc8","overlay2":"#9399b2","overlay1":"#7f849c","overlay0":"#6c7086","surface2":"#585b70","surface1":"#45475a","surface0":"#313244","base":"#1e1e2e","base2":"#242438","mantle":"#181825","crust":"#11111b"},"hpTemplate":{"theme.bar.menus.menu.notifications.scrollbar.color":"#b4befe","theme.bar.menus.menu.notifications.pager.label":"#9399b2","theme.bar.menus.menu.notifications.pager.button":"#b4befe","theme.bar.menus.menu.notifications.pager.background":"#11111b","theme.bar.menus.menu.notifications.switch.puck":"#454759","theme.bar.menus.menu.notifications.switch.disabled":"#313245","theme.bar.menus.menu.notifications.switch.enabled":"#b4befe","theme.bar.menus.menu.notifications.clear":"#f38ba8","theme.bar.menus.menu.notifications.switch_divider":"#45475a","theme.bar.menus.menu.notifications.border":"#313244","theme.bar.menus.menu.notifications.card":"#1e1e2e","theme.bar.menus.menu.notifications.background":"#11111b","theme.bar.menus.menu.notifications.no_notifications_label":"#313244","theme.bar.menus.menu.notifications.label":"#b4befe","theme.bar.menus.menu.power.buttons.sleep.icon":"#181824","theme.bar.menus.menu.power.buttons.sleep.text":"#89dceb","theme.bar.menus.menu.power.buttons.sleep.icon_background":"#89dceb","theme.bar.menus.menu.power.buttons.sleep.background":"#1e1e2e","theme.bar.menus.menu.power.buttons.logout.icon":"#181824","theme.bar.menus.menu.power.buttons.logout.text":"#a6e3a1","theme.bar.menus.menu.power.buttons.logout.icon_background":"#a6e3a1","theme.bar.menus.menu.power.buttons.logout.background":"#1e1e2e","theme.bar.menus.menu.power.buttons.restart.icon":"#181824","theme.bar.menus.menu.power.buttons.restart.text":"#fab387","theme.bar.menus.menu.power.buttons.restart.icon_background":"#fab387","theme.bar.menus.menu.power.buttons.restart.background":"#1e1e2e","theme.bar.menus.menu.power.buttons.shutdown.icon":"#181824","theme.bar.menus.menu.power.buttons.shutdown.text":"#f38ba8","theme.bar.menus.menu.power.buttons.shutdown.icon_background":"#f38ba7","theme.bar.menus.menu.power.buttons.shutdown.background":"#1e1e2e","theme.bar.menus.menu.power.border.color":"#313244","theme.bar.menus.menu.power.background.color":"#11111b","theme.bar.menus.menu.dashboard.monitors.disk.label":"#f5c2e7","theme.bar.menus.menu.dashboard.monitors.disk.bar":"#f5c2e8","theme.bar.menus.menu.dashboard.monitors.disk.icon":"#f5c2e7","theme.bar.menus.menu.dashboard.monitors.gpu.label":"#a6e3a1","theme.bar.menus.menu.dashboard.monitors.gpu.bar":"#a6e3a2","theme.bar.menus.menu.dashboard.monitors.gpu.icon":"#a6e3a1","theme.bar.menus.menu.dashboard.monitors.ram.label":"#f9e2af","theme.bar.menus.menu.dashboard.monitors.ram.bar":"#f9e2ae","theme.bar.menus.menu.dashboard.monitors.ram.icon":"#f9e2af","theme.bar.menus.menu.dashboard.monitors.cpu.label":"#eba0ac","theme.bar.menus.menu.dashboard.monitors.cpu.bar":"#eba0ad","theme.bar.menus.menu.dashboard.monitors.cpu.icon":"#eba0ac","theme.bar.menus.menu.dashboard.monitors.bar_background":"#45475a","theme.bar.menus.menu.dashboard.directories.right.bottom.color":"#b4befe","theme.bar.menus.menu.dashboard.directories.right.middle.color":"#cba6f7","theme.bar.menus.menu.dashboard.directories.right.top.color":"#94e2d5","theme.bar.menus.menu.dashboard.directories.left.bottom.color":"#eba0ac","theme.bar.menus.menu.dashboard.directories.left.middle.color":"#f9e2af","theme.bar.menus.menu.dashboard.directories.left.top.color":"#f5c2e7","theme.bar.menus.menu.dashboard.controls.input.text":"#181824","theme.bar.menus.menu.dashboard.controls.input.background":"#f5c2e7","theme.bar.menus.menu.dashboard.controls.volume.text":"#181824","theme.bar.menus.menu.dashboard.controls.volume.background":"#eba0ac","theme.bar.menus.menu.dashboard.controls.notifications.text":"#181824","theme.bar.menus.menu.dashboard.controls.notifications.background":"#f9e2af","theme.bar.menus.menu.dashboard.controls.bluetooth.text":"#181824","theme.bar.menus.menu.dashboard.controls.bluetooth.background":"#89dceb","theme.bar.menus.menu.dashboard.controls.wifi.text":"#181824","theme.bar.menus.menu.dashboard.controls.wifi.background":"#cba6f7","theme.bar.menus.menu.dashboard.controls.disabled":"#585b70","theme.bar.menus.menu.dashboard.shortcuts.recording":"#a6e3a1","theme.bar.menus.menu.dashboard.shortcuts.text":"#181824","theme.bar.menus.menu.dashboard.shortcuts.background":"#b4befe","theme.bar.menus.menu.dashboard.powermenu.confirmation.button_text":"#11111a","theme.bar.menus.menu.dashboard.powermenu.confirmation.deny":"#f38ba8","theme.bar.menus.menu.dashboard.powermenu.confirmation.confirm":"#a6e3a1","theme.bar.menus.menu.dashboard.powermenu.confirmation.body":"#cdd6f4","theme.bar.menus.menu.dashboard.powermenu.confirmation.label":"#b4befe","theme.bar.menus.menu.dashboard.powermenu.confirmation.border":"#313244","theme.bar.menus.menu.dashboard.powermenu.confirmation.background":"#11111b","theme.bar.menus.menu.dashboard.powermenu.confirmation.card":"#1e1e2e","theme.bar.menus.menu.dashboard.powermenu.sleep":"#89dceb","theme.bar.menus.menu.dashboard.powermenu.logout":"#a6e3a1","theme.bar.menus.menu.dashboard.powermenu.restart":"#fab387","theme.bar.menus.menu.dashboard.powermenu.shutdown":"#f38ba8","theme.bar.menus.menu.dashboard.profile.name":"#f5c2e7","theme.bar.menus.menu.dashboard.border.color":"#313244","theme.bar.menus.menu.dashboard.background.color":"#11111b","theme.bar.menus.menu.dashboard.card.color":"#1e1e2e","theme.bar.menus.menu.clock.weather.hourly.temperature":"#f5c2e7","theme.bar.menus.menu.clock.weather.hourly.icon":"#f5c2e7","theme.bar.menus.menu.clock.weather.hourly.time":"#f5c2e7","theme.bar.menus.menu.clock.weather.thermometer.extremelycold":"#89dceb","theme.bar.menus.menu.clock.weather.thermometer.cold":"#89b4fa","theme.bar.menus.menu.clock.weather.thermometer.moderate":"#b4befe","theme.bar.menus.menu.clock.weather.thermometer.hot":"#fab387","theme.bar.menus.menu.clock.weather.thermometer.extremelyhot":"#f38ba8","theme.bar.menus.menu.clock.weather.stats":"#f5c2e7","theme.bar.menus.menu.clock.weather.status":"#94e2d5","theme.bar.menus.menu.clock.weather.temperature":"#cdd6f4","theme.bar.menus.menu.clock.weather.icon":"#f5c2e7","theme.bar.menus.menu.clock.calendar.contextdays":"#585b70","theme.bar.menus.menu.clock.calendar.days":"#cdd6f4","theme.bar.menus.menu.clock.calendar.currentday":"#f5c2e7","theme.bar.menus.menu.clock.calendar.paginator":"#f5c2e6","theme.bar.menus.menu.clock.calendar.weekdays":"#f5c2e7","theme.bar.menus.menu.clock.calendar.yearmonth":"#94e2d5","theme.bar.menus.menu.clock.time.timeperiod":"#94e2d5","theme.bar.menus.menu.clock.time.time":"#f5c2e7","theme.bar.menus.menu.clock.text":"#cdd6f4","theme.bar.menus.menu.clock.border.color":"#313244","theme.bar.menus.menu.clock.background.color":"#11111b","theme.bar.menus.menu.clock.card.color":"#1e1e2e","theme.bar.menus.menu.battery.slider.puck":"#6c7086","theme.bar.menus.menu.battery.slider.backgroundhover":"#45475a","theme.bar.menus.menu.battery.slider.background":"#585b71","theme.bar.menus.menu.battery.slider.primary":"#f9e2af","theme.bar.menus.menu.battery.icons.active":"#f9e2af","theme.bar.menus.menu.battery.icons.passive":"#9399b2","theme.bar.menus.menu.battery.listitems.active":"#f9e2af","theme.bar.menus.menu.battery.listitems.passive":"#cdd6f3","theme.bar.menus.menu.battery.text":"#cdd6f4","theme.bar.menus.menu.battery.label.color":"#f9e2af","theme.bar.menus.menu.battery.border.color":"#313244","theme.bar.menus.menu.battery.background.color":"#11111b","theme.bar.menus.menu.battery.card.color":"#1e1e2e","theme.bar.menus.menu.systray.dropdownmenu.divider":"#1e1e2e","theme.bar.menus.menu.systray.dropdownmenu.text":"#cdd6f4","theme.bar.menus.menu.systray.dropdownmenu.background":"#11111b","theme.bar.menus.menu.bluetooth.iconbutton.active":"#89dceb","theme.bar.menus.menu.bluetooth.iconbutton.passive":"#cdd6f4","theme.bar.menus.menu.bluetooth.icons.active":"#89dceb","theme.bar.menus.menu.bluetooth.icons.passive":"#9399b2","theme.bar.menus.menu.bluetooth.listitems.active":"#89dcea","theme.bar.menus.menu.bluetooth.listitems.passive":"#cdd6f4","theme.bar.menus.menu.bluetooth.switch.puck":"#454759","theme.bar.menus.menu.bluetooth.switch.disabled":"#313245","theme.bar.menus.menu.bluetooth.switch.enabled":"#89dceb","theme.bar.menus.menu.bluetooth.switch_divider":"#45475a","theme.bar.menus.menu.bluetooth.status":"#6c7086","theme.bar.menus.menu.bluetooth.text":"#cdd6f4","theme.bar.menus.menu.bluetooth.label.color":"#89dceb","theme.bar.menus.menu.bluetooth.scroller.color":"#89dceb","theme.bar.menus.menu.bluetooth.border.color":"#313244","theme.bar.menus.menu.bluetooth.background.color":"#11111b","theme.bar.menus.menu.bluetooth.card.color":"#1e1e2e","theme.bar.menus.menu.network.iconbuttons.active":"#cba6f7","theme.bar.menus.menu.network.iconbuttons.passive":"#cdd6f4","theme.bar.menus.menu.network.icons.active":"#cba6f7","theme.bar.menus.menu.network.icons.passive":"#9399b2","theme.bar.menus.menu.network.listitems.active":"#cba6f6","theme.bar.menus.menu.network.listitems.passive":"#cdd6f4","theme.bar.menus.menu.network.status.color":"#6c7086","theme.bar.menus.menu.network.text":"#cdd6f4","theme.bar.menus.menu.network.label.color":"#cba6f7","theme.bar.menus.menu.network.scroller.color":"#cba6f7","theme.bar.menus.menu.network.border.color":"#313244","theme.bar.menus.menu.network.background.color":"#11111b","theme.bar.menus.menu.network.card.color":"#1e1e2e","theme.bar.menus.menu.volume.input_slider.puck":"#585b70","theme.bar.menus.menu.volume.input_slider.backgroundhover":"#45475a","theme.bar.menus.menu.volume.input_slider.background":"#585b71","theme.bar.menus.menu.volume.input_slider.primary":"#eba0ac","theme.bar.menus.menu.volume.audio_slider.puck":"#585b70","theme.bar.menus.menu.volume.audio_slider.backgroundhover":"#45475a","theme.bar.menus.menu.volume.audio_slider.background":"#585b71","theme.bar.menus.menu.volume.audio_slider.primary":"#eba0ac","theme.bar.menus.menu.volume.icons.active":"#eba0ac","theme.bar.menus.menu.volume.icons.passive":"#9399b2","theme.bar.menus.menu.volume.iconbutton.active":"#eba0ac","theme.bar.menus.menu.volume.iconbutton.passive":"#cdd6f4","theme.bar.menus.menu.volume.listitems.active":"#eba0ab","theme.bar.menus.menu.volume.listitems.passive":"#cdd6f4","theme.bar.menus.menu.volume.text":"#cdd6f4","theme.bar.menus.menu.volume.label.color":"#eba0ac","theme.bar.menus.menu.volume.border.color":"#313244","theme.bar.menus.menu.volume.background.color":"#11111b","theme.bar.menus.menu.volume.card.color":"#1e1e2e","theme.bar.menus.menu.media.slider.puck":"#6c7086","theme.bar.menus.menu.media.slider.backgroundhover":"#45475a","theme.bar.menus.menu.media.slider.background":"#585b71","theme.bar.menus.menu.media.slider.primary":"#f5c2e7","theme.bar.menus.menu.media.buttons.text":"#11111b","theme.bar.menus.menu.media.buttons.background":"#b4beff","theme.bar.menus.menu.media.buttons.enabled":"#94e2d4","theme.bar.menus.menu.media.buttons.inactive":"#585b70","theme.bar.menus.menu.media.border.color":"#313244","theme.bar.menus.menu.media.card.color":"#1e1e2e","theme.bar.menus.menu.media.background.color":"#11111b","theme.bar.menus.menu.media.album":"#f5c2e8","theme.bar.menus.menu.media.timestamp":"#cdd6f4","theme.bar.menus.menu.media.artist":"#94e2d6","theme.bar.menus.menu.media.song":"#b4beff","theme.bar.menus.tooltip.text":"#cdd6f4","theme.bar.menus.tooltip.background":"#11111b","theme.bar.menus.dropdownmenu.divider":"#1e1e2e","theme.bar.menus.dropdownmenu.text":"#cdd6f4","theme.bar.menus.dropdownmenu.background":"#11111b","theme.bar.menus.slider.puck":"#6c7086","theme.bar.menus.slider.backgroundhover":"#45475a","theme.bar.menus.slider.background":"#585b71","theme.bar.menus.slider.primary":"#b4befe","theme.bar.menus.progressbar.background":"#45475a","theme.bar.menus.progressbar.foreground":"#b4befe","theme.bar.menus.iconbuttons.active":"#b4beff","theme.bar.menus.iconbuttons.passive":"#cdd6f3","theme.bar.menus.buttons.text":"#181824","theme.bar.menus.buttons.disabled":"#585b71","theme.bar.menus.buttons.active":"#f5c2e6","theme.bar.menus.buttons.default":"#b4befe","theme.bar.menus.check_radio_button.active":"#b4beff","theme.bar.menus.check_radio_button.background":"#45475a","theme.bar.menus.switch.puck":"#454759","theme.bar.menus.switch.disabled":"#313245","theme.bar.menus.switch.enabled":"#b4befe","theme.bar.menus.icons.active":"#b4befe","theme.bar.menus.icons.passive":"#585b70","theme.bar.menus.listitems.active":"#b4befd","theme.bar.menus.listitems.passive":"#cdd6f4","theme.bar.menus.popover.border":"#181824","theme.bar.menus.popover.background":"#181824","theme.bar.menus.popover.text":"#b4befe","theme.bar.menus.label":"#b4befe","theme.bar.menus.feinttext":"#313244","theme.bar.menus.dimtext":"#585b70","theme.bar.menus.text":"#cdd6f4","theme.bar.menus.border.color":"#313244","theme.bar.menus.cards":"#1e1e2e","theme.bar.menus.background":"#11111b","theme.bar.buttons.modules.power.icon_background":"#f38ba8","theme.bar.buttons.modules.power.icon":"#f38ba8","theme.bar.buttons.modules.power.background":"#242438","theme.bar.buttons.modules.power.border":"#f38ba8","theme.bar.buttons.modules.weather.icon_background":"#b4befe","theme.bar.buttons.modules.weather.icon":"#b4befe","theme.bar.buttons.modules.weather.text":"#b4befe","theme.bar.buttons.modules.weather.background":"#242438","theme.bar.buttons.modules.weather.border":"#b4befe","theme.bar.buttons.modules.updates.icon_background":"#cba6f7","theme.bar.buttons.modules.updates.icon":"#cba6f7","theme.bar.buttons.modules.updates.text":"#cba6f7","theme.bar.buttons.modules.updates.background":"#242438","theme.bar.buttons.modules.updates.border":"#cba6f7","theme.bar.buttons.modules.kbLayout.icon_background":"#89dceb","theme.bar.buttons.modules.kbLayout.icon":"#89dceb","theme.bar.buttons.modules.kbLayout.text":"#89dceb","theme.bar.buttons.modules.kbLayout.background":"#242438","theme.bar.buttons.modules.kbLayout.border":"#89dceb","theme.bar.buttons.modules.netstat.icon_background":"#a6e3a1","theme.bar.buttons.modules.netstat.icon":"#a6e3a1","theme.bar.buttons.modules.netstat.text":"#a6e3a1","theme.bar.buttons.modules.netstat.background":"#242438","theme.bar.buttons.modules.netstat.border":"#a6e3a1","theme.bar.buttons.modules.storage.icon_background":"#f5c2e7","theme.bar.buttons.modules.storage.icon":"#f5c2e7","theme.bar.buttons.modules.storage.text":"#f5c2e7","theme.bar.buttons.modules.storage.background":"#242438","theme.bar.buttons.modules.storage.border":"#f5c2e7","theme.bar.buttons.modules.cpu.icon_background":"#f38ba8","theme.bar.buttons.modules.cpu.icon":"#f38ba8","theme.bar.buttons.modules.cpu.text":"#f38ba8","theme.bar.buttons.modules.cpu.background":"#242438","theme.bar.buttons.modules.cpu.border":"#f38ba8","theme.bar.buttons.modules.ram.icon_background":"#f9e2af","theme.bar.buttons.modules.ram.icon":"#f9e2af","theme.bar.buttons.modules.ram.text":"#f9e2af","theme.bar.buttons.modules.ram.background":"#242438","theme.bar.buttons.modules.ram.border":"#f9e2af","theme.bar.buttons.notifications.total":"#b4befe","theme.bar.buttons.notifications.icon_background":"#b4befe","theme.bar.buttons.notifications.icon":"#b4befe","theme.bar.buttons.notifications.background":"#242438","theme.bar.buttons.notifications.border":"#b4befe","theme.bar.buttons.clock.icon_background":"#f5c2e7","theme.bar.buttons.clock.icon":"#f5c2e7","theme.bar.buttons.clock.text":"#f5c2e7","theme.bar.buttons.clock.background":"#242438","theme.bar.buttons.clock.border":"#f5c2e7","theme.bar.buttons.battery.icon_background":"#f9e2af","theme.bar.buttons.battery.icon":"#f9e2af","theme.bar.buttons.battery.text":"#f9e2af","theme.bar.buttons.battery.background":"#242438","theme.bar.buttons.battery.border":"#f9e2af","theme.bar.buttons.systray.background":"#242438","theme.bar.buttons.systray.border":"#b4befe","theme.bar.buttons.systray.customIcon":"#cdd6f4","theme.bar.buttons.bluetooth.icon_background":"#89dbeb","theme.bar.buttons.bluetooth.icon":"#89dceb","theme.bar.buttons.bluetooth.text":"#89dceb","theme.bar.buttons.bluetooth.background":"#242438","theme.bar.buttons.bluetooth.border":"#89dceb","theme.bar.buttons.network.icon_background":"#caa6f7","theme.bar.buttons.network.icon":"#cba6f7","theme.bar.buttons.network.text":"#cba6f7","theme.bar.buttons.network.background":"#242438","theme.bar.buttons.network.border":"#cba6f7","theme.bar.buttons.volume.icon_background":"#eba0ac","theme.bar.buttons.volume.icon":"#eba0ac","theme.bar.buttons.volume.text":"#eba0ac","theme.bar.buttons.volume.background":"#242438","theme.bar.buttons.volume.border":"#eba0ac","theme.bar.buttons.media.icon_background":"#b4befe","theme.bar.buttons.media.icon":"#b4befe","theme.bar.buttons.media.text":"#b4befe","theme.bar.buttons.media.background":"#242438","theme.bar.buttons.media.border":"#b4befe","theme.bar.buttons.windowtitle.icon_background":"#f5c2e7","theme.bar.buttons.windowtitle.icon":"#f5c2e7","theme.bar.buttons.windowtitle.text":"#f5c2e7","theme.bar.buttons.windowtitle.border":"#f5c2e7","theme.bar.buttons.windowtitle.background":"#242438","theme.bar.buttons.workspaces.numbered_active_underline_color":"#f5c2e7","theme.bar.buttons.workspaces.numbered_active_highlighted_text_color":"#181825","theme.bar.buttons.workspaces.hover":"#f5c2e7","theme.bar.buttons.workspaces.active":"#f5c2e7","theme.bar.buttons.workspaces.occupied":"#f2cdcd","theme.bar.buttons.workspaces.available":"#89dceb","theme.bar.buttons.workspaces.border":"#f5c2e7","theme.bar.buttons.workspaces.background":"#242438","theme.bar.buttons.dashboard.icon":"#f9e2af","theme.bar.buttons.dashboard.border":"#f9e2af","theme.bar.buttons.dashboard.background":"#242438","theme.bar.buttons.icon":"#b4befe","theme.bar.buttons.text":"#b4befe","theme.bar.buttons.hover":"#45475a","theme.bar.buttons.icon_background":"#242438","theme.bar.buttons.background":"#242438","theme.bar.buttons.borderColor":"#b4befe","theme.bar.buttons.style":"default","theme.bar.background":"#11111b","theme.osd.label":"#b4beff","theme.osd.icon":"#11111b","theme.osd.bar_overflow_color":"#f38ba7","theme.osd.bar_empty_color":"#313244","theme.osd.bar_color":"#b4beff","theme.osd.icon_container":"#b4beff","theme.osd.bar_container":"#11111b","theme.notification.close_button.label":"#11111b","theme.notification.close_button.background":"#f38ba7","theme.notification.labelicon":"#b4befe","theme.notification.text":"#cdd6f4","theme.notification.time":"#7f849b","theme.notification.border":"#313243","theme.notification.label":"#b4befe","theme.notification.actions.text":"#181825","theme.notification.actions.background":"#b4befd","theme.notification.background":"#181826","theme.bar.buttons.modules.submap.icon":"#94e2d5","theme.bar.buttons.modules.submap.background":"#242438","theme.bar.buttons.modules.submap.icon_background":"#242438","theme.bar.buttons.modules.submap.text":"#94e2d5","theme.bar.buttons.modules.submap.border":"#94e2d5","theme.bar.menus.menu.network.switch.enabled":"#cba6f7","theme.bar.menus.menu.network.switch.disabled":"#313245","theme.bar.menus.menu.network.switch.puck":"#454759","theme.bar.border.color":"#b4befe","theme.bar.buttons.modules.hyprsunset.icon":"#fab387","theme.bar.buttons.modules.hyprsunset.background":"#242438","theme.bar.buttons.modules.hyprsunset.icon_background":"#242438","theme.bar.buttons.modules.hyprsunset.text":"#fab387","theme.bar.buttons.modules.hyprsunset.border":"#f5c2e7","theme.bar.buttons.modules.hypridle.icon":"#f5c2e7","theme.bar.buttons.modules.hypridle.background":"#242438","theme.bar.buttons.modules.hypridle.icon_background":"#f5c2e7","theme.bar.buttons.modules.hypridle.text":"#f5c2e7","theme.bar.buttons.modules.hypridle.border":"#f5c2e7","theme.bar.buttons.modules.cava.text":"#94e2d5","theme.bar.buttons.modules.cava.background":"#242438","theme.bar.buttons.modules.cava.icon_background":"#242438","theme.bar.buttons.modules.cava.icon":"#94e2d5","theme.bar.buttons.modules.cava.border":"#94e2d5","theme.bar.buttons.modules.worldclock.text":"#f5c2e7","theme.bar.buttons.modules.worldclock.background":"#242438","theme.bar.buttons.modules.worldclock.icon_background":"#f5c2e7","theme.bar.buttons.modules.worldclock.icon":"#f5c2e7","theme.bar.buttons.modules.worldclock.border":"#f5c2e7","theme.bar.buttons.modules.microphone.border":"#a6e3a1","theme.bar.buttons.modules.microphone.background":"#242438","theme.bar.buttons.modules.microphone.text":"#a6e3a1","theme.bar.buttons.modules.microphone.icon":"#a6e3a1","theme.bar.buttons.modules.microphone.icon_background":"#242438"}};
-const FASTFETCH="//@file fastfetch\n// Строки //@ — разметка для mors-settings (configurator/): по ним рисуется окно настроек.\n// type: block — переключатель модуля: выключенный модуль просто закомментирован (//).\n{\n    \"$schema\": \"https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json\",\n//@section Логотип\n    \"logo\": {\n        //@name: Тип логотипа | type: enum | options: auto, builtin, small, file, kitty, kitty-direct, sixel, chafa, none | desc: auto — картинка, если терминал умеет (kitty), иначе значок дистрибутива\n        \"type\": \"auto\",\n        //@name: Картинки | type: dir | glob: *.png, *.jpg, *.webp, * | desc: Папка с картинками; fastfetch берёт случайную из подходящих под маску\n        \"source\": \"~/.config/fastfetch/images/*.png\",\n        //@name: Высота логотипа | type: int | range: 5-40 | desc: В строках терминала\n        \"height\": 15\n    },\n//@end\n//@section Оформление\n    \"display\": {\n        //@name: Разделитель | type: string | desc: Между значком и значением\n        \"separator\": \" \"\n    },\n//@end\n    \"modules\": [\n        \"break\",\n        \"break\",\n        \"break\",\n        {\n            \"type\": \"custom\",\n            \"format\": \"\\u001b[90m  \\u001b[31m  \\u001b[32m  \\u001b[33m  \\u001b[34m  \\u001b[35m  \\u001b[36m  \\u001b[37m  \"\n        },\n        \"break\",\n//@section Заголовок\n        {\n            \"type\": \"title\",\n            //@name: Отступ после заголовка | type: int | range: 0-30 | desc: keyWidth модуля «пользователь@машина»\n            \"keyWidth\": 10\n        },\n//@end\n        \"break\",\n//@section Система\n        //@name: Система (ОС) | type: block\n        {\n            \"type\": \"os\",\n            \"key\": \" \",\n            //@name: Цвет значков | type: enum | options: 34, 31, 32, 33, 35, 36, 37, blue, magenta, cyan | desc: 34 — синий (color4 темы)\n            \"keyColor\": \"34\",  // = color4\n        },\n        //@name: Ядро | type: block\n        {\n            \"type\": \"kernel\",\n            \"key\": \" \",\n            \"keyColor\": \"34\",\n        },\n        //@name: Пакеты | type: block\n        {\n            \"type\": \"packages\",\n            // \"format\": \"{} (pacman)\",\n            \"key\": \" \",\n            \"keyColor\": \"34\",\n        },\n        //@name: Оболочка | type: block\n        {\n            \"type\": \"shell\",\n            \"key\": \" \",\n            \"keyColor\": \"34\", },\n//@end\n        \"break\",\n//@section Сеанс\n        //@name: Терминал | type: block\n        // {\n        //     \"type\": \"terminal\",\n        //     \"key\": \" \",\n        //     \"keyColor\": \"34\",\n        // },\n        //@name: Оконный менеджер | type: block\n        {\n            \"type\": \"wm\",\n            \"key\": \" \",\n            \"keyColor\": \"34\",\n        },\n        //@name: Курсор | type: block\n        // {\n        //     \"type\": \"cursor\",\n        //     \"key\": \" \",\n        //     \"keyColor\": \"34\",\n        // },\n        //@name: Шрифт терминала | type: block\n        // {\n        //     \"type\": \"terminalfont\",\n        //     \"key\": \" \",\n        //     \"keyColor\": \"34\",\n        // },\n        //@name: Время работы | type: block\n        {\n            \"type\": \"uptime\",\n            \"key\": \" \",\n            \"keyColor\": \"34\",\n        },\n        //@name: Дней с установки | type: block | desc: Считается по дате создания корневого раздела\n        {\n            \"type\": \"command\",\n            \"key\": \"󱦟 \",\n            \"keyColor\": \"34\",\n            \"text\": \"birth_install=$(stat -c %W /); current=$(date +%s); time_progression=$((current - birth_install)); days_difference=$((time_progression / 86400)); echo $days_difference days\"\n        },\n        //@name: Дата и время | type: block\n        // {\n        //     \"type\": \"datetime\",\n        //     \"format\": \"{1}-{3}-{11}\",\n        //     \"key\": \" \",\n        //     \"keyColor\": \"34\",\n        // },\n        //@name: Что играет | type: block\n        {\n            \"type\": \"media\",\n            \"key\": \"󰝚 \",\n            \"keyColor\": \"34\",\n        },\n//@end\n        // \"break\",\n        \"break\",\n//@section Железо\n        //@name: Процессор | type: block\n        {\n            \"type\": \"cpu\",\n            \"key\": \" \",\n            \"keyColor\": \"blue\"\n        },\n        //@name: Видеокарта | type: block\n        {\n            \"type\": \"gpu\",\n            \"key\": \" \",\n            \"keyColor\": \"blue\"\n        },\n        //@name: Память | type: block\n        {\n            \"type\": \"memory\",\n            \"key\": \" \",\n            \"keyColor\": \"blue\"\n        },\n//@end\n        \"break\",\n        {\n            \"type\": \"custom\",\n            \"format\": \"\\u001b[90m  \\u001b[31m  \\u001b[32m  \\u001b[33m  \\u001b[34m  \\u001b[35m  \\u001b[36m  \\u001b[37m \"\n        },\n        \"break\",\n        \"break\",\n    ]\n}\n";
+const FASTFETCH="//@file fastfetch\n// Строки //@ — разметка для mors-settings (configurator/): по ним рисуется окно настроек.\n// type: block — переключатель модуля: выключенный модуль просто закомментирован (//).\n//@section Проверка\n//@name: Посмотреть результат | type: action | run: fastfetch | term: yes | label: Запустить fastfetch | desc: Откроет терминал с fastfetch — сразу видно, как легли правки\n//@end\n{\n    \"$schema\": \"https://github.com/fastfetch-cli/fastfetch/raw/dev/doc/json_schema.json\",\n//@section Логотип\n    \"logo\": {\n        //@name: Тип логотипа | type: enum | options: auto, builtin, small, file, kitty, kitty-direct, sixel, chafa, none | desc: auto — картинка, если терминал умеет (kitty), иначе значок дистрибутива\n        \"type\": \"auto\",\n        //@name: Картинки | type: dir | glob: *.png, *.jpg, *.webp, * | desc: Папка с картинками; fastfetch берёт случайную из подходящих под маску\n        \"source\": \"~/.config/fastfetch/images/*.png\",\n        //@name: Высота логотипа | type: int | range: 5-40 | desc: В строках терминала\n        \"height\": 15\n    },\n//@end\n//@section Оформление\n    \"display\": {\n        //@name: Разделитель | type: string | desc: Между значком и значением\n        \"separator\": \" \"\n    },\n//@end\n    \"modules\": [\n        \"break\",\n        \"break\",\n        \"break\",\n        {\n            \"type\": \"custom\",\n            \"format\": \"\\u001b[90m  \\u001b[31m  \\u001b[32m  \\u001b[33m  \\u001b[34m  \\u001b[35m  \\u001b[36m  \\u001b[37m  \"\n        },\n        \"break\",\n//@section Заголовок\n        {\n            \"type\": \"title\",\n            //@name: Отступ после заголовка | type: int | range: 0-30 | desc: keyWidth модуля «пользователь@машина»\n            \"keyWidth\": 10\n        },\n//@end\n        \"break\",\n//@section Система\n        //@name: Система (ОС) | type: block\n        {\n            \"type\": \"os\",\n            \"key\": \" \",\n            //@name: Цвет значков | type: enum | options: 34, 31, 32, 33, 35, 36, 37, blue, magenta, cyan | desc: 34 — синий (color4 темы)\n            \"keyColor\": \"34\",  // = color4\n        },\n        //@name: Ядро | type: block\n        {\n            \"type\": \"kernel\",\n            \"key\": \" \",\n            \"keyColor\": \"34\",\n        },\n        //@name: Пакеты | type: block\n        {\n            \"type\": \"packages\",\n            // \"format\": \"{} (pacman)\",\n            \"key\": \" \",\n            \"keyColor\": \"34\",\n        },\n        //@name: Оболочка | type: block\n        {\n            \"type\": \"shell\",\n            \"key\": \" \",\n            \"keyColor\": \"34\", },\n//@end\n        \"break\",\n//@section Сеанс\n        //@name: Терминал | type: block\n        // {\n        //     \"type\": \"terminal\",\n        //     \"key\": \" \",\n        //     \"keyColor\": \"34\",\n        // },\n        //@name: Оконный менеджер | type: block\n        {\n            \"type\": \"wm\",\n            \"key\": \" \",\n            \"keyColor\": \"34\",\n        },\n        //@name: Курсор | type: block\n        // {\n        //     \"type\": \"cursor\",\n        //     \"key\": \" \",\n        //     \"keyColor\": \"34\",\n        // },\n        //@name: Шрифт терминала | type: block\n        // {\n        //     \"type\": \"terminalfont\",\n        //     \"key\": \" \",\n        //     \"keyColor\": \"34\",\n        // },\n        //@name: Время работы | type: block\n        {\n            \"type\": \"uptime\",\n            \"key\": \" \",\n            \"keyColor\": \"34\",\n        },\n        //@name: Дней с установки | type: block | desc: Считается по дате создания корневого раздела\n        {\n            \"type\": \"command\",\n            \"key\": \"󱦟 \",\n            \"keyColor\": \"34\",\n            \"text\": \"birth_install=$(stat -c %W /); current=$(date +%s); time_progression=$((current - birth_install)); days_difference=$((time_progression / 86400)); echo $days_difference days\"\n        },\n        //@name: Дата и время | type: block\n        // {\n        //     \"type\": \"datetime\",\n        //     \"format\": \"{1}-{3}-{11}\",\n        //     \"key\": \" \",\n        //     \"keyColor\": \"34\",\n        // },\n        //@name: Что играет | type: block\n        {\n            \"type\": \"media\",\n            \"key\": \"󰝚 \",\n            \"keyColor\": \"34\",\n        },\n//@end\n        // \"break\",\n        \"break\",\n//@section Железо\n        //@name: Процессор | type: block\n        {\n            \"type\": \"cpu\",\n            \"key\": \" \",\n            \"keyColor\": \"blue\"\n        },\n        //@name: Видеокарта | type: block\n        {\n            \"type\": \"gpu\",\n            \"key\": \" \",\n            \"keyColor\": \"blue\"\n        },\n        //@name: Память | type: block\n        {\n            \"type\": \"memory\",\n            \"key\": \" \",\n            \"keyColor\": \"blue\"\n        },\n//@end\n        \"break\",\n        {\n            \"type\": \"custom\",\n            \"format\": \"\\u001b[90m  \\u001b[31m  \\u001b[32m  \\u001b[33m  \\u001b[34m  \\u001b[35m  \\u001b[36m  \\u001b[37m \"\n        },\n        \"break\",\n        \"break\",\n    ]\n}\n";
+const ROFI="//@file rofi — лаунчер\n// Строки //@ — разметка для mors-settings: по ним рисуется окно настроек (rofi их не читает).\n/*****----- Configuration -----*****/\nconfiguration {\n//@section Поведение\n\t//@name: Режимы | type: string | desc: Через запятую: drun, run, filebrowser, recursivebrowser, window, emoji, calc\n\tmodi:                       \"drun,filebrowser,run,recursivebrowser\";\n    //@name: Значки приложений | type: bool\n    show-icons:                 true;\n//@end\n//@section Значки режимов\n    //@name: Приложения | type: string | desc: Значок или текст на кнопке режима\n    display-drun:               \"\";\n    //@name: Команды | type: string | desc: Значок или текст на кнопке режима\n    display-run:                \"\";\n    //@name: Файлы | type: string | desc: Значок или текст на кнопке режима\n    display-filebrowser:        \"\";\n    //@name: Поиск файлов | type: string | desc: Значок или текст на кнопке режима\n    display-recursivebrowser:   \"󰈞\";\n    //@name: Эмодзи | type: string | desc: Значок или текст на кнопке режима\n    display-emoji:              \"󰞅\";\n    //@name: Окна | type: string | desc: Значок или текст на кнопке режима\n    display-window:             \"\";\n    //@name: Калькулятор | type: string | desc: Значок или текст на кнопке режима\n    display-calc:               \"\";\n//@end\n//@section Подписи\n\t//@name: Как подписывать приложения | type: string | desc: {name}, {generic}, {exec}, {categories}\n\tdrun-display-format:        \"{name}\";\n\t//@name: Как подписывать окна | type: string | desc: {w} — рабочий стол, {c} — класс, {t} — заголовок\n\twindow-format:              \"{w} · {c} · {t}\";\n//@end\n}\n\n/*****----- Global Properties -----*****/\n@import                          \"colors.rasi\"\n@import                          \"fonts.rasi\"\n\n* {\n    border-colour:               var(primary);\n    handle-colour:               var(on-surface);\n    background-colour:           var(surface);\n    foreground-colour:           var(on-surface);\n    alternate-background:        var(surface-container);\n    normal-background:           @element-bg;\n    normal-foreground:           var(on-surface);\n    urgent-background:           var(error);\n    urgent-foreground:           var(on-error);\n    active-background:           var(primary-container);\n    active-foreground:           var(on-primary-container);\n    selected-normal-background:  var(primary);\n    selected-normal-foreground:  var(on-primary);\n    selected-urgent-background:  var(error-container);\n    selected-urgent-foreground:  var(on-error-container);\n    selected-active-background:  var(secondary-container);\n    selected-active-foreground:  var(on-secondary-container);\n    alternate-normal-background: @element-bg;\n    alternate-normal-foreground: var(on-surface-variant);\n    alternate-urgent-background: var(error);\n    alternate-urgent-foreground: var(on-error);\n    alternate-active-background: var(primary-container);\n    alternate-background:        @element-bg;\n    alternate-active-foreground: var(on-primary-container);\nwbg:var(surface);\nelement-bg:var(surface-container-low);\n    }\n/*****----- Main Window -----*****/\nwindow {\n    transparency:                \"real\";\n//@section Окно\n    //@name: Где открывать | type: enum | options: west, center, north, south, east\n    location:                    west;\n    //@name: К чему прижимать | type: enum | options: west, center, north, south, east\n    anchor:                      west;\n    fullscreen:                  false;\n    //@name: Ширина | type: string | desc: В px или %\n    width:                       400px;\n    //@name: Высота | type: string | desc: В px или %\n    height:                      98.7%;\n    x-offset:                    0px;\n    y-offset:                    0px;\n    enabled:                     true;\n    //@name: Отступ от края | type: string | desc: сверху справа снизу слева\n    margin:                      0px 0px 0px 8px;\n    //@name: Скругление окна | type: string\n    border-radius:               18px;\n//@end\n    padding:                     2px;\n    border:                      0px solid 0px;\n    border-color:                var(outline-variant);\n    cursor:                      \"default\";\n    background-color:            @wbg;\n}\n\n/*****----- Main Box -----*****/\nmainbox {\n    enabled:                     true;\n    spacing:                     8px;\n    margin:                      0px;\n    padding:                     16px;\n    border:                      0px;\n    border-radius:               0px;\n    border-color:                var(outline);\n    children:                    [ \"inputbar\", \"message\", \"listview\", \"mode-switcher\" ];\n}\n\n/*****----- Inputbar -----*****/\ninputbar {\n    enabled:                     true;\n//@section Строка поиска\n    //@name: Расстояние в строке поиска | type: string\n    spacing:                     20px;\n    margin:                      0px 0px 8px 0px;\n    padding:                     12px;\n    //@name: Скругление строки поиска | type: string\n    border-radius:               25px;\n//@end\n    border-color:                var(outline);\n    background-color:            @element-bg;\n    text-color:                  var(on-surface);\n    children:                    [\"entry\",\"prompt\"];\n}\n\nprompt {\n    enabled:                     true;\n    background-color:            transparent;\n    text-color:                  inherit;\n    margin: \t\t\t 0 4px;\n}\ntextbox-prompt-colon {\n    enabled:                     true;\n    expand:                      false;\n    str:                         \"::\";\n    background-color:            inherit;\n    text-color:                  inherit;\n}\nentry {\n    enabled:                     true;\n    background-color:            transparent;\n    text-color:                  inherit;\n    cursor:                      text;\n//@section Поле ввода\n    //@name: Подсказка в поиске | type: string\n    placeholder:                 \"Type to search\";\n    //@name: Прозрачность текста | type: float | range: 0-1 | step: 0.05\n    opacity:                     0.3;\n//@end\n    placeholder-color:           var(on-surface-variant);\n}\nnum-filtered-rows {\n    enabled:                     true;\n    expand:                      false;\n    background-color:            inherit;\n    text-color:                  inherit;\n}\ntextbox-num-sep {\n    enabled:                     true;\n    expand:                      false;\n    str:                         \"/\";\n    background-color:            inherit;\n    text-color:                  inherit;\n}\nnum-rows {\n    enabled:                     true;\n    expand:                      false;\n    background-color:            inherit;\n    text-color:                  inherit;\n}\ncase-indicator {\n    enabled:                     true;\n    background-color:            inherit;\n    text-color:                  inherit;\n}\n\n/*****----- Listview -----*****/\nlistview {\n    enabled:                     true;\n//@section Список\n    //@name: Колонок | type: int | range: 1-6\n    columns:                     1;\n    //@name: Строк | type: int | range: 1-20\n    lines:                       8;\n    //@name: По кругу | type: bool | desc: После последнего пункта — снова первый\n    cycle:                       true;\n    dynamic:                     true;\n    //@name: Полоса прокрутки | type: bool\n    scrollbar:                   false;\n    layout:                      vertical;\n    reverse:                     false;\n    fixed-height:                true;\n    fixed-columns:               true;\n\n    //@name: Расстояние между пунктами | type: string\n    spacing:                     6px;\n//@end\n    margin:                      0px;\n    padding:                     4px 0px;\n    border:                      0px;\n    background-color:            transparent;\n}\n\nscrollbar {\n    handle-width:                5px ;\n    handle-color:                @handle-colour;\n    border-radius:               12px;\n}\n\n/*****----- Elements -----*****/\nelement {\n    enabled:                     true;\n//@section Пункты\n    //@name: Расстояние значок — текст | type: string\n    spacing:                     18px;\n    margin:                      2px;\n    //@name: Внутренний отступ пункта | type: string\n    padding:                     10px;\n    border:                      0px solid;\n    //@name: Скругление пункта | type: string\n    border-radius:               12px;\n//@end\n    background-color:            transparent;\n    text-color:                  var(on-surface);\n    cursor:                      pointer;\n    orientation:                 horizontal;\n}\n\nelement.selected {\n    background-color:            var(primary);\n    background-image:            var(gradient);\n    text-color:                  var(on-primary);\n}\n\nelement-icon {\n    background-color:            transparent;\n    text-color:                  inherit;\n//@section Значки\n    //@name: Размер значков | type: string\n    size:                        38px;\n//@end\n    cursor:                      inherit;\n}\n\nelement-text {\n    background-color:            transparent;\n    text-color:                  inherit;\n    highlight:                   inherit;\n    cursor:                      inherit;\n    vertical-align:              0.5;\n    horizontal-align:            0.0;\n}\n\n/*****----- Mode Switcher -----*****/\nmode-switcher{\n//@section Переключатель режимов\n    //@name: Переключатель режимов | type: bool | desc: Кнопки внизу\n    enabled:                     true;\n    spacing:                     8px;\n    margin:                      8px 0px 0px 0px;\n    padding:                     5px;\n    border:                      0.3px solid;\n    //@name: Скругление переключателя | type: string\n    border-radius:               25px;\n//@end\n    border-color:                var(outline);\n    background-color:            @element-bg;\n}\n\nbutton {\n    padding:                     7px 12px;\n    border-radius:               25px;\n    background-color:            transparent;\n    text-color:                  var(on-surface-variant);\n    cursor:                      pointer;\n}\nbutton selected {\n    background-color:            var(primary);\n    background-image:            var(gradient);\n    text-color:                  var(on-primary);\n}\n\n/*****----- Message -----*****/\nmessage {\n    enabled:                     true;\n    margin:                      0px;\n    padding:                     8px 8px;\n    border:                      1px solid;\n    border-radius:               8px;\n    border-color:                var(outline);\n    background-color:            var(surface-container);\n    text-color:                  var(on-surface);\n}\ntextbox {\n    padding:                     8px;\n    border:                      0px solid;\n    border-radius:               4px;\n    border-color:                var(outline);\n    background-color:            var(surface-container);\n    text-color:                  var(on-surface);\n    vertical-align:              0.5;\n    horizontal-align:            0.0;\n    highlight:                   none;\n    placeholder-color:           var(on-surface);\n    blink:                       true;\n    markup:                      true;\n}\nerror-message {\n    padding:                     10px;\n    border:                      0px solid;\n    border-radius:               0px;\n    border-color:                @border-colour;\n    background-color:            @background-colour;\n    text-color:                  @foreground-colour;\n}\n";
 let riceCurrent=RICE.current;
 function applyTheme(id,announce){
   const t=RICE.themes[id];if(!t)return;riceCurrent=id;const p=t.palette,c=k=>p[k]||k,acc=t.accent;
@@ -782,6 +818,8 @@ const configs=[
    files:[doc('~/.config/kitty/kitty.conf',KITTY)]},
   ...(FASTFETCH?[{name:'fastfetch',mode:'markup',format:'jsonc',comment:'//',marker:'@',follow:false,start:{mode:'all',begin:'',end:''},live:null,liveNote:'fastfetch читает конфиг при каждом запуске — открой новый терминал',
    files:[doc('~/.config/fastfetch/config.jsonc',FASTFETCH)]}]:[]),
+  ...(ROFI?[{name:'rofi',mode:'markup',format:'rasi',comment:'//',marker:'@',follow:true,start:{mode:'all',begin:'',end:''},live:null,liveNote:'rofi читает конфиг при каждом запуске',
+   files:[doc('~/.config/rofi/config.rasi',ROFI)]}]:[]),
   {name:'HyprPanel',mode:'adapter',hp:true,format:'json',schemaFile:'hyprpanel.ru.toml',schema:HP_SCHEMA,live:null,liveNote:'HyprPanel сам перечитывает config.json — изменения применятся сразу после сохранения',
    files:[doc('~/.config/hyprpanel/config.json',JSON.stringify(HP.user,null,2))]}
 ];
@@ -828,6 +866,8 @@ function parseMarkup(cfg,d){
       if(/^section\b/.test(body)){section=body.replace(/^section\s*/,'')||'Раздел';continue;}
       if(body==='end'){section='Без раздела';continue;}
       const meta={};body.split('|').forEach(p=>{const k=p.indexOf(':');if(k>0)meta[p.slice(0,k).trim()]=p.slice(k+1).trim();});
+      if(meta.name&&(meta.type||'').toLowerCase()==='action'){   // кнопка: значения под ней нет
+        items.push({line:i,action:true,meta,value:meta.run||'',section,key:meta.name,path:meta.name});info[i]={kind:'val',item:items.length-1};pending=null;continue;}
       if(meta.name)pending=meta;continue;
     }
     if(t.startsWith(cfg.comment)){info[i]={kind:'cmt'};continue;}
@@ -982,11 +1022,12 @@ function renderSidebar(){
     }
     return h;}).join('');
   $$('#cfglist .cfg').forEach(b=>b.onclick=()=>selectConfig(configs[+b.dataset.i]));
-  $('#sysBtn').classList.toggle('active',state.view==='system');$('#fmtBtn').classList.toggle('active',state.view==='formats');
+  $('#sysBtn').classList.toggle('active',state.view==='system');$('#fmtBtn').classList.toggle('active',state.view==='formats');$('#scrBtn').classList.toggle('active',state.view==='scripts');
   $$('#cfglist .subfile[data-fi]').forEach(b=>b.onclick=()=>focusFile(+b.dataset.fi));
   const a=$('#sideAddFile');if(a)a.onclick=openFileModal;
 }
 function focusFile(fi){
+  if(state.view!=='cfg'){if(state.capturing)stopCapture();closeSystem();state.parsed=parseCur();renderAll();}   // клик по файлу со страниц «Система»/«Форматы»
   state.file=fi;const k=cur.name+':'+fi;state.collapsed.delete(k);
   if(state.tab!=='src'&&state.tab!=='raw')state.tab='src';
   renderSidebar();renderForm();renderTabs();renderChips();renderPane();
@@ -994,7 +1035,8 @@ function focusFile(fi){
 }
 function renderTop(){
   $('#modeBadge').textContent=BRIDGE?'':'прототип в браузере';$('#brandSub').textContent=BRIDGE?'настройки райса':'прототип интерфейса';if(BRIDGE)document.title='Настройки';$('#modeBadge').style.display=BRIDGE?'none':'';
-  $$('#status,#liveWrap,#undoBtn,#revertBtn,#saveBtn').forEach(e=>e.style.display=state.view!=='cfg'?'none':'');
+  $$('#status,#liveWrap,#undoBtn,#revertBtn,#saveBtn,#paneBtn').forEach(e=>e.style.display=state.view!=='cfg'?'none':'');
+  if(state.view==='scripts'){$('#tName').textContent='Скрипты';$('#tPath').textContent='свои кнопки: скрипты, демоны, алиасы — запуск из окна';return;}
   if(state.view==='formats'){$('#tName').textContent='Форматы конфигов';$('#tPath').textContent='как программа читает строки · свои правила для нестандартных файлов';return;}
   if(state.view==='system'){$('#tName').textContent='Система';$('#tPath').textContent=BRIDGE?SYS.dots||'':'тема · масштаб · обновление райса';return;}
   $('#tName').textContent=cur.name;
@@ -1181,6 +1223,7 @@ function controlHTML(it,g){
   if(cur.format==='lua'&&!luaLiteral(it))return `<code class="roval" title="Это выражение, а не значение — его задаёт тема rice или код">${esc(v)}</code><span class="tag rice">${/^t\./.test(v)?'из темы':'выражение'}</span>`;
   if(t==='int'||t==='float'){const [mn,mx]=parseRange(m.range,t),st=m.step||(t==='int'?1:0.1);
     return `<input type="range" min="${mn}" max="${mx}" step="${st}" value="${esc(v)}" data-role="range" ${d}><input class="num" type="number" min="${mn}" max="${mx}" step="${st}" value="${esc(v)}" data-role="num" ${d}>`;}
+  if(t==='action')return `<button class="btn small" data-role="action" ${d} title="${esc(m.run||'')}">▶ ${esc(m.label||'Запустить')}</button>`;
   if(t==='bool'||t==='block')return `<label class="switch"><input type="checkbox" ${isTrue(v)?'checked':''} data-role="bool" ${d}><span></span></label>`;
   if(t==='enum'){const o=(m.options||'').split(',').map(s=>s.trim()).filter(Boolean);if(!o.includes(v))o.unshift(v);
     return `<select data-role="enum" ${d}>${o.map(x=>`<option ${x===v?'selected':''}>${esc(x)}</option>`).join('')}</select>`;}
@@ -1215,6 +1258,7 @@ function bindForm(){
       if(el.dataset.kind==='dir'&&gl.length){const sp=splitGlob(v),pat=sp.pat||gl[0];   // папка + маска из разметки
         const p=await pickPath('dir',sp.dir||v||'~',{});if(p)setValue(g,p.replace(/\/$/,'')+'/'+pat,{rerender:true});return;}
       const p=await pickPath(el.dataset.kind,v,{filter:pickFilter(m)});if(p)setValue(g,p,{rerender:true});});
+    if(role==='action')el.addEventListener('click',()=>runMarkupAction(it()));
     if(role==='mglob')el.addEventListener('change',()=>{const sp=splitGlob(it().value);setValue(g,(sp.dir?sp.dir+'/':'')+el.value,{rerender:true});});
     if(role==='text'&&document.getElementById('gi-'+g))el.addEventListener('input',()=>{clearTimeout(globTimers[g]);globTimers[g]=setTimeout(()=>showGlobInfo(g),400);});
     if(role==='kbcap')el.addEventListener('click',()=>{if(state.capturing)stopCapture();state.capturing={g,el};el.classList.add('capturing');el.textContent='…';});
@@ -1247,7 +1291,8 @@ function checkConflict(g){
       toast(`⚠ Сочетание уже занято ${who}`,true);return;}}
 }
 function gotoItem(g){const it=state.parsed.items[g];if(it.line<0){toast('Этого ключа нет в config.json — HyprPanel берёт значение по умолчанию. Измени его, и ключ появится.');return;}state.file=it.fi;
-  if(state.tab!=='src')state.tab='src';renderTabs();renderChips();renderSidebar();renderPane(it.line,'center');}
+  if(state.tab!=='src')state.tab='src';renderTabs();renderChips();renderSidebar();renderPane(it.line,'center');
+  if(matchMedia('(max-width:1250px)').matches)drawer('showpane',true);}   // узкое окно: показать строку в шторке
 
 function tabsFor(){return cur.mode==='adapter'
   ?[['src','Исходник'],['schema','Схема адаптера'],['help','Шпаргалка']]
@@ -1263,6 +1308,7 @@ function renderChips(){const el=$('#filechips');
 function hlLine(l,inf){
   if(inf.kind==='val'&&cur.mode!=='adapter'){const it=state.parsed.items[inf.g];
     if(it.block)return `<span class="v">${esc(l)}</span>`;
+    if(it.action)return `<span class="a">${esc(l)}</span>`;
     const v=it.quoted==='json'?JSON.stringify(String(it.value)):it.quoted?it.quoted+it.value+it.quoted:it.value;
     return esc(it.pre)+`<span class="k">${esc(it.keyRaw)}</span><span class="op">${esc(it.sep)}</span><span class="v">${esc(v)}</span>`+esc(it.post);}
   if(inf.kind==='val'){const m=l.match(/^(\s*)(".*?")(:\s*)(.*)$/);if(m)return esc(m[1])+`<span class="k">${esc(m[2])}</span><span class="op">${esc(m[3])}</span><span class="v">${esc(m[4])}</span>`;}
@@ -1330,6 +1376,7 @@ gaps_in = 5</pre>
   <tr><td><code>font</code></td><td>выбор шрифта из установленных</td><td>—</td></tr>
   <tr><td><code>file</code> / <code>image</code> / <code>dir</code></td><td>поле + «Выбрать…»</td><td>окно выбора файлов KDE; <code>filter: *.png *.jpg</code> — в окне только такие файлы</td></tr>
   <tr><td><code>dir</code> + <code>glob</code></td><td>выбор папки, к ней дописывается маска</td><td><code>glob: *.png, *.jpg, *</code> — первая по умолчанию, остальные в списке; под полем — сколько файлов подходит</td></tr>
+  <tr><td><code>action</code></td><td>кнопка — запускает команду</td><td><code>run: makoctl reload</code>; <code>label:</code> — текст кнопки; <code>confirm:</code> — спросить; <code>term: yes</code> — в терминале; <code>{file}</code>, <code>{dir}</code> — этот файл и его папка</td></tr>
   <tr><td><code>block</code></td><td>переключатель целого блока <code>{…}</code> под строкой</td><td>выключено = блок закомментирован; модули fastfetch, waybar</td></tr>
   <tr><td><code>string</code></td><td>поле ввода</td><td>—</td></tr></table>
   <h3>С чего начинать разбор</h3>
@@ -1450,7 +1497,9 @@ $$('.modal-bg').forEach(bg=>bg.addEventListener('mousedown',e=>{if(e.target===bg
 const BRIDGE=(()=>{
   const h=window.webkit&&window.webkit.messageHandlers&&window.webkit.messageHandlers.mors;if(!h)return null;
   let n=0;const wait={};
-  window.__morsReply=(id,ok,data)=>{const w=wait[id];if(!w)return;delete wait[id];ok?w.res(data):w.rej(new Error(data));};
+  window.__morsReply=(id,ok,data)=>{const w=wait[id];if(!w)return;delete wait[id];
+    if(!ok&&String(data).startsWith('STALE|')){data=String(data).slice(6);setTimeout(()=>showRestart(data),0);}
+    ok?w.res(data):w.rej(new Error(data));};
   window.__morsEvent=ev=>onBridgeEvent(ev);
   return {call:(cmd,args={})=>new Promise((res,rej)=>{const id=++n;wait[id]={res,rej};h.postMessage(JSON.stringify({id,cmd,args}));})};
 })();
@@ -1464,14 +1513,14 @@ async function bootBridge(){
   if(!BRIDGE)return;
   try{
     const st=await BRIDGE.call('state');
-    SYS.dots=st.dots;SYS.repo=st.repo;SYS.gear=st.gear;
+    SYS.dots=st.dots;SYS.repo=st.repo;SYS.gear=st.gear;if(st.stale)showRestart();
     const c=hpCfg();c.live='file';c.liveNote='';
     if(st.hyprpanel&&st.hyprpanel.text!=null)hpLoadText(st.hyprpanel.text,st.hyprpanel.path);
     try{USER_FORMATS=await BRIDGE.call('formats')||{};buildFormats();fillFormatSelect();}catch(e){}
     await loadRealConfigs();
     if(st.zoom)applyZoom(st.zoom,false);
     if(st.theme&&RICE.themes[st.theme])applyTheme(st.theme);
-    if(st.open==='system')openSystem();
+    if(st.open)openPage(st.open);
     renderAll();
   }catch(e){toast('Оболочка не ответила: '+e.message,true);}
 }
@@ -1481,8 +1530,9 @@ function onBridgeEvent(ev){
     if(ev.name!==riceCurrent)applyTheme(ev.name,true);else if(state.view==='system')renderSystem();
     loadWallpapers();}
   if(ev.type==='hyprpanel'){const dirty=hpLoadText(ev.text);if(ev.external)setTimeout(()=>toast(dirty?'config.json HyprPanel изменился на диске — твои несохранённые правки не тронуты':'config.json HyprPanel обновлён с диска'),900);}
-  if(ev.type==='open'&&ev.page==='system')openSystem();
+  if(ev.type==='open')openPage(ev.page);
   if(ev.type==='log'){termAdd(ev.text,ev.kind);}
+  if(ev.type==='run'||ev.type==='runDone')onRunEvent(ev);
 }
 /* ---------- настоящий Hyprland (Lua) ---------- */
 /* настоящие конфиги: в окне программы демо-данные заменяются файлами с диска */
@@ -1525,10 +1575,10 @@ function applyZoom(z,persist=true){z=Math.max(60,Math.min(200,Math.round(z)));zo
   if(state.view==='system')renderSystemZoom();}
 
 /* ---------- страница «Система» ---------- */
-function openSystem(){if(state.capturing)stopCapture();state.view='system';$('#content').hidden=true;$('#fmtview').hidden=true;$('#sysview').hidden=false;renderSidebar();renderTop();renderSystem();
+function openSystem(){if(state.capturing)stopCapture();state.view='system';$('#content').hidden=true;$('#fmtview').hidden=true;$('#scrview').hidden=true;$('#sysview').hidden=false;renderSidebar();renderTop();renderSystem();
   if(BRIDGE){BRIDGE.call('state').then(st=>{SYS.repo=st.repo;SYS.gear=st.gear;renderSystem();}).catch(()=>{});loadWallpapers();}
   loadDisplays();}
-function closeSystem(){state.view='cfg';$('#sysview').hidden=true;$('#fmtview').hidden=true;$('#content').hidden=false;}
+function closeSystem(){state.view='cfg';$('#sysview').hidden=true;$('#fmtview').hidden=true;$('#scrview').hidden=true;$('#content').hidden=false;}
 function termAdd(text,kind){SYS.term.push({text,kind});if(SYS.term.length>400)SYS.term.splice(0,SYS.term.length-400);
   const el=document.getElementById('term');if(el){el.insertAdjacentHTML('beforeend',termLine(SYS.term[SYS.term.length-1]));el.scrollTop=el.scrollHeight;}}
 const termLine=l=>`<div class="${l.kind||''}">${esc(l.text)}</div>`;
@@ -1743,10 +1793,10 @@ function ruleOf(o,which='cur'){const c=o[which],D=SYS.disp,start=c.res==='prefer
   const live=c.warmRate!=null&&D.warmDone?`${c.res}@${fmtRate(c.warmRate)}`:start;
   return {output:o.e?o.e.fields.output:(o.m.description?'desc:'+o.m.description:o.m.name),mode:live,start,warm:c.warmRate!=null?`${c.res}@${fmtRate(c.warmRate)}`:null,
     position:`${c.x}x${c.y}`,scale:c.scale,transform:c.transform};}
-async function applyDisplays(rules){if(!rules.length)return;
-  for(const r of rules)termAdd(`$ hyprctl eval hl.monitor({ output = "${r.output}", mode = "${r.mode}", position = "${r.position}", scale = ${r.scale}${r.transform?', transform = '+r.transform:''} })`,'c');
-  if(BRIDGE){try{const res=await BRIDGE.call('applyMonitors',{rules});res.forEach(x=>termAdd(x.ok?`✓ ${x.output}`:`✗ ${x.output}: ${x.out}`,x.ok?'ok':'err'));}catch(e){termAdd('✗ '+e.message,'err');}}
-  else termAdd('(имитация)');}
+async function applyDisplays(rules){if(!rules.length)return true;
+  for(const r of rules)termAdd(`$ hyprctl eval hl.monitor({ output = "${r.output}", mode = "${r.mode}", position = "${r.position}", scale = ${r.scale}, transform = ${r.transform||0} })`,'c');
+  if(BRIDGE){try{const res=await BRIDGE.call('applyMonitors',{rules});res.forEach(x=>termAdd(x.ok?`✓ ${x.output}`:`✗ ${x.output}: ${x.out}`,x.ok?'ok':'err'));return res.every(x=>x.ok);}catch(e){termAdd('✗ '+e.message,'err');return false;}}
+  else termAdd('(имитация)');return true;}
 function hostTextWith(D){const tbl=parseMonTable(D.host.text);if(!tbl)return null;const lines=[...tbl.lines],add=[];
   for(const o of D.model){if(!dirtyMon(o)&&o.e)continue;if(!dirtyMon(o))continue;const r=ruleOf(o);
     const e=o.e?{...o.e,fields:{...o.e.fields},order:[...o.e.order]}:{indent:'    ',key:(o.m.name||'mon').toLowerCase().replace(/\W+/g,'_'),fields:{output:r.output},order:['output'],comment:''};
@@ -1763,9 +1813,15 @@ async function keepDisplays(){clearInterval(dispTimer);SYS.dispConfirm=null;cons
   else if(BRIDGE){try{const r=await BRIDGE.call('writeHost',{text});termAdd(`✓ сохранено в ${D.host.path}${r&&r.backup?' · копия '+r.backup:''}`,'ok');}catch(e){termAdd('✗ '+e.message,'err');}}
   else{D.host.text=text;termAdd('✓ сохранено (имитация)','ok');}
   if(BRIDGE)await loadDisplays();else{SYS.disp.model=dispModel(SYS.disp);renderSystem();}}
-async function revertDisplays(auto){clearInterval(dispTimer);SYS.dispConfirm=null;const D=SYS.disp;
+let dispReverting=false;
+async function revertDisplays(auto){if(dispReverting)return;dispReverting=true;clearInterval(dispTimer);SYS.dispConfirm=null;const D=SYS.disp;
   const rules=D.model.filter(dirtyMon).map(o=>ruleOf(o,'init'));D.model.forEach(o=>o.cur={...o.init});
-  termAdd(auto?'время вышло — возвращаю как было':'возвращаю как было');await applyDisplays(rules);renderSystem();}
+  if(!rules.length){dispReverting=false;renderSystem();return;}
+  termAdd(auto?'время вышло — возвращаю как было':'возвращаю как было');renderSystem();
+  try{const ok=await applyDisplays(rules);
+    if(!ok)termAdd('! не всё вернулось само — проверь «Перечитать»; в крайнем случае hyprctl reload вернёт настройки из конфига (прогрев DP-2 начнётся заново)','err');
+    if(BRIDGE)await loadDisplays();}
+  finally{dispReverting=false;renderSystem();}}
 function bindDisplays(){const D=SYS.disp;if(!D||!D.model.length)return;const o=D.model.find(o=>o.m.name===SYS.dispSel)||D.model[0],c=o.cur;
   const upd=()=>renderSystem();
   $$('[data-dmon]').forEach(el=>{const name=el.dataset.dmon,ob=D.model.find(x=>x.m.name===name);
@@ -1805,7 +1861,7 @@ async function updateRice(){if(SYS.busy)return;
   if(!BRIDGE){termAdd('$ git -C ~/mors-dots pull --ff-only','c');termAdd('(в браузере команды не выполняются — скопируй строку выше и запусти в терминале)');return;}
   setBusy('update');SYS.needInstall=false;renderSystem();
   try{const r=await BRIDGE.call('updateRice');SYS.repo=r.repo||SYS.repo;SYS.needInstall=!!r.needInstall;
-    termAdd(r.message,r.ok?'ok':'err');if(r.needInstall)termAdd('! изменились пакеты или установщик — нажми «Запустить установщик в терминале»','err');}
+    termAdd(r.message,r.ok?'ok':'err');if(r.appChanged)showRestart('Райс обновлён, и конфигуратор вместе с ним — перезапусти окно, чтобы заработало новое');if(r.needInstall)termAdd('! изменились пакеты или установщик — нажми «Запустить установщик в терминале»','err');}
   catch(e){termAdd('✗ '+e.message,'err');}
   setBusy('');renderSystem();}
 /* ---------- страница «Форматы» ---------- */
@@ -1817,7 +1873,7 @@ function fmtDraftOf(id){const f=FMT_BUILTIN[id]||USER_FORMATS[id]||{};const d={i
 const NEW_FORMAT=()=>({id:'',label:'Мой формат',comment:'#',sep:' = ',tail:'',re:reSrc(FMT_BUILTIN.conf.re),hook:'',quote:'auto',nest:'none',open:'',close:'',join:':',
   src:'',srcTpl:'',check:'',sample:'# пример: вставь сюда кусок своего конфига\nkey = value\nother = "text"'});
 function openFormats(id,isNew){if(state.capturing)stopCapture();
-  state.view='formats';$('#content').hidden=true;$('#sysview').hidden=true;$('#fmtview').hidden=false;
+  state.view='formats';$('#content').hidden=true;$('#sysview').hidden=true;$('#scrview').hidden=true;$('#fmtview').hidden=false;
   if(isNew){FS.isNew=true;FS.sel=null;FS.draft=NEW_FORMAT();}
   else{FS.isNew=false;FS.sel=id||FS.sel||'conf';if(!FORMATS[FS.sel])FS.sel='conf';FS.draft=fmtDraftOf(FS.sel);}
   FS.checkMsg='';renderSidebar();renderTop();renderFormats();}
@@ -1825,7 +1881,7 @@ function fmtUsedBy(id){return configs.filter(c=>c.format===id).map(c=>c.name);}
 function renderFormats(){
   const d=FS.draft,ro=!FS.isNew&&!!FMT_BUILTIN[FS.sel],dis=ro?'disabled':'';
   const item=(k,f)=>`<button class="fi ${k===FS.sel&&!FS.isNew?'active':''}" data-f="${esc(k)}">${esc(f.label)}<small>${esc(k)}${fmtUsedBy(k).length?' · '+esc(fmtUsedBy(k).join(', ')):''}</small></button>`;
-  const user=Object.keys(USER_FORMATS);
+  const user=Object.keys(USER_FORMATS).filter(k=>!FMT_BUILTIN[k]);
   const inp=(k,label,hint,ph='')=>`<div class="field"><label>${label}</label><input type="text" data-k="${k}" value="${esc(d[k])}" placeholder="${esc(ph)}" ${dis} spellcheck="false"><span class="ferr" id="fe-${k}"></span>${hint?`<span class="hint">${hint}</span>`:''}</div>`;
   const sel=(k,label,opts,hint)=>`<div class="field"><label>${label}</label><select data-k="${k}" ${dis}>${opts.map(([v,t])=>`<option value="${v}" ${d[k]===v?'selected':''}>${esc(t)}</option>`).join('')}</select>${hint?`<span class="hint">${hint}</span>`:''}</div>`;
   $('#fmtview').innerHTML=`<div class="fmtpage">
@@ -1864,7 +1920,13 @@ return m ? [m[1], m[2], m[3], m[4], ''] : null;">${esc(d.hook)}</textarea>
       <div class="fmtbar">
         ${ro?`<button class="btn primary" id="fmtCopy">Сделать копию</button>`
           :`<button class="btn primary" id="fmtSave">${FS.isNew?'Создать формат':'Сохранить'}</button>${FS.isNew?'':`<button class="btn" id="fmtCopy">Копия</button><button class="btn" id="fmtDel">Удалить</button>`}`}
+        <button class="btn" id="fmtExport" title="Описание формата текстом — перенести на другую машину или поделиться">Экспорт</button>
+        <button class="btn" id="fmtImport">Импорт…</button>
         <span class="hint" id="fmtSaveMsg"></span>
+      </div>
+      <div id="fmtIO" hidden style="margin-top:12px">
+        <textarea id="fmtIOText" rows="8" spellcheck="false" placeholder='{ "id": "rasi", "label": "rofi (rasi)", "comment": "//", "re": "..." }'></textarea>
+        <div class="fmtbar"><button class="btn primary small" id="fmtIOLoad">Загрузить как новый формат</button><span class="hint" id="fmtIOMsg">Скопируй текст выше на другую машину — там «Импорт…», вставить, «Загрузить».</span></div>
       </div>
     </div>
     <div class="card" style="margin-top:14px">
@@ -1887,6 +1949,16 @@ return m ? [m[1], m[2], m[3], m[4], ''] : null;">${esc(d.hook)}</textarea>
   const sv=$('#fmtSave');if(sv)sv.onclick=fmtSave;
   const dl=$('#fmtDel');if(dl)dl.onclick=fmtDelete;
   $('#fmtCheck').onclick=fmtCheckSample;
+  $('#fmtExport').onclick=()=>{const d=FS.draft,o={id:FS.isNew?d.id:FS.sel};FMT_FIELDS.forEach(k=>{if(String(d[k]??'')!=='')o[k]=d[k];});
+    $('#fmtIO').hidden=false;const t=$('#fmtIOText');t.value=JSON.stringify(o,null,2);t.focus();t.select();
+    try{navigator.clipboard.writeText(t.value).then(()=>{$('#fmtIOMsg').textContent='✓ скопировано в буфер обмена';},()=>{});}catch(e){}};
+  $('#fmtImport').onclick=()=>{$('#fmtIO').hidden=false;const t=$('#fmtIOText');t.value='';t.focus();$('#fmtIOMsg').textContent='Вставь описание формата (JSON) и нажми «Загрузить».';};
+  $('#fmtIOLoad').onclick=()=>{let o;try{o=JSON.parse($('#fmtIOText').value);}catch(e){$('#fmtIOMsg').textContent='⚠ это не JSON: '+e.message;return;}
+    if(!o||typeof o!=='object'){$('#fmtIOMsg').textContent='⚠ ожидается объект { … }';return;}
+    const d={id:String(o.id||'').toLowerCase().replace(/[^a-z0-9_-]/g,'')};FMT_FIELDS.forEach(k=>d[k]=o[k]==null?'':String(o[k]));
+    if(!d.quote)d.quote='auto';if(!d.nest)d.nest='none';
+    if(FORMATS[d.id])d.id=(d.id||'format')+'-2';
+    FS.isNew=true;FS.sel=null;FS.draft=d;renderFormats();toast('Формат загружен — проверь на примере и нажми «Создать формат»');};
   fmtRunTest();}
 function fmtCompiledDraft(){const d=FS.draft,spec={};FMT_FIELDS.forEach(k=>spec[k]=d[k]);return compileFormat(d.id||'__draft',spec,false);}
 function fmtRunTest(){
@@ -1941,6 +2013,123 @@ async function fmtCheckSample(){const d=FS.draft,c=String(d.check||'').trim();
   catch(e){FS.checkMsg='✗ '+e.message;}
   $('#fmtCheckMsg').textContent=FS.checkMsg;}
 $('#fmtBtn').onclick=()=>state.view==='formats'?selectConfig(cur):openFormats();
+/* ---------- скрипты: кнопки в разметке и страница «Скрипты» ----------
+   набор = {name, desc, base, cwd, status, actions:[{label, args, confirm, term}]}
+   команда кнопки = base + ' ' + args (алиас/подкоманда скрипта) или просто args, если base пустой */
+const SC={list:[],edit:null,draft:null,out:[],runs:{},status:{},fish:null,loaded:false};
+const RUNS={};let runSeq=0;
+const homeVar=p=>String(p||'').replace(/^~(?=\/|$)/,'$HOME');
+function scrCmd(g,a){const args=String(a.args||'').trim(),base=String(g.base||'').trim();return base?(args?base+' '+args:base):args;}
+async function runCommand(cmd,opts={}){const run='r'+(++runSeq)+'-'+Date.now().toString(36);
+  RUNS[run]={owner:opts.owner||'scripts',label:opts.label||cmd,cmd};
+  if(!BRIDGE){onRunEvent({type:'run',run,line:`(в браузере команды не выполняются — в программе здесь запустится: ${cmd})`});onRunEvent({type:'runDone',run,code:0});return;}
+  try{const r=await BRIDGE.call('runCommand',{cmd,run,cwd:opts.cwd||null,term:!!opts.term,title:opts.label||null});
+    if(opts.term){delete RUNS[run];toast(`Открыл в терминале (${r.term}): ${opts.label||cmd}`);}}
+  catch(e){delete RUNS[run];toast(e.message,true);if(opts.owner!=='markup')scrOut('✗ '+e.message,'err');}}
+function onRunEvent(ev){const r=RUNS[ev.run];if(!r)return;
+  if(r.owner==='markup'){
+    if(ev.type==='run')addLog(null,null,ev.line);
+    else{addLog(null,null,ev.code===0?`✓ готово: ${r.label}`:`✗ ${r.label}: код ${ev.code}`);toast(ev.code===0?`✓ ${r.label}`:`✗ ${r.label}: код ${ev.code}`,ev.code!==0);delete RUNS[ev.run];}
+    return;}
+  if(ev.type==='run')scrOut(ev.line);
+  else{scrOut(ev.code===0?'✓ готово':`✗ код ${ev.code}`,ev.code===0?'ok':'err');delete RUNS[ev.run];SC.running=null;
+    if(state.view==='scripts'){const b=$('#scrStop');if(b)b.disabled=true;scrRefreshStatus();}}}
+function scrOut(text,kind){SC.out.push({text,kind});if(SC.out.length>600)SC.out.splice(0,SC.out.length-600);
+  const el=document.getElementById('scrOut');if(el){const h=el.querySelector('.hint');if(h)h.remove();el.insertAdjacentHTML('beforeend',`<div class="${kind||''}">${esc(text)}</div>`);el.scrollTop=el.scrollHeight;}}
+function runMarkupAction(it){const m=it.meta,d=cur.files[it.fi],file=homeVar(d.path),dir=homeVar(d.path.replace(/\/[^/]*$/,''));
+  const cmd=String(m.run||'').replace(/\{file\}/g,`"${file}"`).replace(/\{dir\}/g,`"${dir}"`);
+  if(!cmd){toast('У кнопки нет run: — нечего запускать',true);return;}
+  if(m.confirm&&!confirm(m.confirm))return;
+  addLog(null,cmd,'');runCommand(cmd,{owner:'markup',label:m.name,cwd:d.path.replace(/\/[^/]*$/,''),term:/^(yes|true|1)$/i.test(m.term||'')});}
+async function loadScripts(){if(SC.loaded)return;SC.loaded=true;
+  if(BRIDGE){try{SC.list=await BRIDGE.call('scripts')||[];}catch(e){SC.list=[];}}
+  else SC.list=[{name:'Пример: свой демон',desc:'Набор из скрипта и его подкоманд-алиасов',base:'~/bin/mydaemon',status:'pgrep -x mydaemon >/dev/null && echo работает || (echo остановлен; exit 1)',
+    actions:[{label:'Запустить',args:'start'},{label:'Остановить',args:'stop',confirm:true},{label:'Перезапустить',args:'restart'},{label:'Логи',args:'logs -f',term:true}]},
+    {name:'Райс',desc:'Обычные команды без общего скрипта',base:'',actions:[{label:'Перечитать Hyprland',args:'hyprctl reload'},{label:'Проверка установки',args:'~/.config/rice/doctor.sh',term:true}]}];}
+async function scrSave(){if(BRIDGE){try{SC.list=await BRIDGE.call('saveScripts',{scripts:SC.list});}catch(e){toast(e.message,true);return false;}}return true;}
+async function openScripts(){if(state.capturing)stopCapture();
+  state.view='scripts';$('#content').hidden=true;$('#sysview').hidden=true;$('#fmtview').hidden=true;$('#scrview').hidden=false;
+  renderSidebar();renderTop();await loadScripts();renderScripts();scrRefreshStatus();}
+async function scrRefreshStatus(){
+  for(const [i,g] of SC.list.entries()){if(!g.status)continue;
+    if(!BRIDGE)SC.status[i]={code:0,out:'(в программе здесь будет вывод: '+g.status+')'};
+    else try{SC.status[i]=await BRIDGE.call('statusCommand',{cmd:g.status,cwd:g.cwd||null});}catch(e){SC.status[i]={code:-1,out:e.message};}
+    const el=document.getElementById('scst-'+i);if(el){const s=SC.status[i];el.className='scrstat '+(s.code===0?'ok':'bad');el.querySelector('span:last-child').textContent=s.out||(s.code===0?'работает':'код '+s.code);}}}
+function renderScripts(){
+  const card=(g,i)=>{if(SC.edit===i)return scrEditHTML();
+    const st=SC.status[i];
+    return `<div class="card"><h2>${esc(g.name||'Без названия')}</h2>${g.desc?`<div class="sub" style="margin-bottom:4px">${esc(g.desc)}</div>`:''}
+      ${g.base?`<div class="scrcmd">${esc(g.base)}</div>`:''}
+      ${g.status?`<div class="scrstat ${st?(st.code===0?'ok':'bad'):''}" id="scst-${i}"><span class="dotx"></span><span>${esc(st?(st.out||(st.code===0?'работает':'код '+st.code)):'проверяю…')}</span></div>`:''}
+      <div class="scrbtns">${(g.actions||[]).map((a,j)=>`<button class="btn" data-run="${i}:${j}" title="${esc(scrCmd(g,a))}">${a.term?'⧉':'▶'} ${esc(a.label||a.args||'?')}</button>`).join('')||'<span class="hint">нет кнопок</span>'}</div>
+      <div class="fmtbar" style="margin-top:12px"><button class="btn small" data-edit="${i}">✎ Изменить</button>${g.status?`<button class="btn small" data-stat="${i}">⟳ Статус</button>`:''}</div></div>`;};
+  $('#scrview').innerHTML=`
+    <div class="card" style="margin-bottom:14px"><h2>Свои кнопки</h2>
+      <div class="sub">Набор — это скрипт или демон и его команды-алиасы: <code>mydaemon start</code>, <code>stop</code>, <code>restart</code>. Кнопка запускает команду и показывает вывод ниже; ⧉ — открыть в терминале (для интерактивных). Можно и без общего скрипта — любые команды. Кнопку прямо в конфиге даёт разметка <code>type: action | run: команда</code>.</div>
+      <div class="fmtbar"><button class="btn primary" id="scrNew">＋ Новый набор</button><button class="btn" id="scrFish">Из алиасов fish…</button></div>
+      <div id="scrFishBox"></div></div>
+    <div class="scrgrid">${SC.list.map(card).join('')}${SC.edit==='new'?scrEditHTML():''}</div>
+    <div class="card" style="margin-top:14px"><h2>Вывод</h2>
+      <div class="scrout" id="scrOut">${SC.out.map(l=>`<div class="${l.kind||''}">${esc(l.text)}</div>`).join('')||'<div class="hint">Здесь появится вывод запущенных команд.</div>'}</div>
+      <div class="fmtbar"><button class="btn small" id="scrStop" ${SC.running?'':'disabled'}>■ Остановить</button><button class="btn small" id="scrClear">Очистить</button></div></div>`;
+  $$('#scrview [data-run]').forEach(b=>b.onclick=()=>{const [i,j]=b.dataset.run.split(':').map(Number),g=SC.list[i],a=g.actions[j],cmd=scrCmd(g,a);
+    if(a.confirm&&!confirm(`Запустить «${a.label}»?\n${cmd}`))return;
+    if(!a.term){scrOut(`$ ${cmd}`,'c');const before=runSeq;runCommand(cmd,{cwd:g.cwd,label:a.label}).then(()=>{SC.running=Object.keys(RUNS).find(k=>RUNS[k].owner==='scripts')||null;const s=$('#scrStop');if(s)s.disabled=!SC.running;});}
+    else runCommand(cmd,{cwd:g.cwd,label:a.label,term:true});});
+  $$('#scrview [data-edit]').forEach(b=>b.onclick=()=>{SC.edit=+b.dataset.edit;SC.draft=JSON.parse(JSON.stringify(SC.list[SC.edit]));renderScripts();});
+  $$('#scrview [data-stat]').forEach(b=>b.onclick=scrRefreshStatus);
+  $('#scrNew').onclick=()=>{SC.edit='new';SC.draft={name:'',desc:'',base:'',cwd:'',status:'',actions:[{label:'',args:''}]};renderScripts();};
+  $('#scrFish').onclick=scrFishList;
+  $('#scrStop').onclick=()=>{if(SC.running&&BRIDGE)BRIDGE.call('stopCommand',{run:SC.running});};
+  $('#scrClear').onclick=()=>{SC.out=[];renderScripts();};
+  if(SC.edit!==null)bindScrEdit();}
+function scrEditHTML(){const g=SC.draft,f=(k,label,ph,mono)=>`<div class="field"><label>${label}</label><input type="text" data-g="${k}" value="${esc(g[k]||'')}" placeholder="${esc(ph)}" ${mono?'style="font-family:var(--mono)"':''} spellcheck="false"></div>`;
+  return `<div class="card fmted" style="grid-column:1/-1"><h2>${SC.edit==='new'?'Новый набор':'Набор: '+esc(g.name)}</h2>
+    <div class="grid2">${f('name','Название','Мой демон')}${f('desc','Описание','что делает')}
+      ${f('base','Скрипт / программа (общая часть команды)','~/bin/mydaemon — пусто, если кнопки независимые',1)}${f('cwd','Папка, где запускать','~ по умолчанию',1)}</div>
+    ${f('status','Команда статуса (необязательно)','pgrep -x mydaemon >/dev/null && echo работает',1)}
+    <span class="hint">Статус показывается в карточке: код 0 — зелёный, иначе красный; первая строка вывода — подпись.</span>
+    <div class="flabel" style="margin-top:12px">Кнопки — название и алиас/подкоманда (или целая команда, если общего скрипта нет)</div>
+    <div class="scrrows">${(g.actions||[]).map((a,j)=>`<div class="scrrow"><input type="text" data-a="${j}:label" value="${esc(a.label||'')}" placeholder="Запустить">
+      <input type="text" class="mono" data-a="${j}:args" value="${esc(a.args||'')}" placeholder="${g.base?'start':'команда'}">
+      <label title="Спросить перед запуском"><input type="checkbox" data-a="${j}:confirm" ${a.confirm?'checked':''}>спросить</label>
+      <label title="Открыть в окне терминала — для интерактивных команд"><input type="checkbox" data-a="${j}:term" ${a.term?'checked':''}>в терминале</label>
+      <button class="btn small" data-adel="${j}" title="Убрать кнопку">✕</button></div>`).join('')}</div>
+    <div class="fmtbar"><button class="btn small" id="scrAddRow">＋ кнопка</button>
+      <input type="text" id="scrQuick" placeholder="быстро: Запустить=start; Остановить=stop; Статус=status" style="flex:1;min-width:200px;background:var(--bg);border:1px solid var(--border);border-radius:7px;padding:5px 9px;color:var(--text);font-family:var(--mono);font-size:12px">
+      <button class="btn small" id="scrQuickAdd">Добавить</button></div>
+    <div class="fmtbar" style="margin-top:14px"><button class="btn primary" id="scrSave">${SC.edit==='new'?'Создать':'Сохранить'}</button><button class="btn" id="scrCancel">Отмена</button>
+      ${SC.edit!=='new'?'<button class="btn" id="scrDel">Удалить набор</button><button class="btn" id="scrUp">↑ выше</button>':''}<span class="hint" id="scrMsg"></span></div></div>`;}
+function bindScrEdit(){const g=SC.draft;
+  $$('#scrview [data-g]').forEach(el=>el.oninput=()=>{g[el.dataset.g]=el.value;});
+  $$('#scrview [data-a]').forEach(el=>{const [j,k]=el.dataset.a.split(':');el.oninput=el.onchange=()=>{g.actions[+j][k]=el.type==='checkbox'?el.checked:el.value;};});
+  $$('#scrview [data-adel]').forEach(b=>b.onclick=()=>{g.actions.splice(+b.dataset.adel,1);renderScripts();});
+  $('#scrAddRow').onclick=()=>{g.actions.push({label:'',args:''});renderScripts();};
+  $('#scrQuickAdd').onclick=()=>{const v=$('#scrQuick').value;v.split(/[;\n]/).map(x=>x.trim()).filter(Boolean).forEach(x=>{const k=x.indexOf('=');
+      g.actions.push(k>0?{label:x.slice(0,k).trim(),args:x.slice(k+1).trim()}:{label:x,args:x});});
+    g.actions=g.actions.filter(a=>a.label||a.args);renderScripts();};
+  $('#scrCancel').onclick=()=>{SC.edit=null;SC.draft=null;renderScripts();};
+  $('#scrSave').onclick=async()=>{g.actions=(g.actions||[]).filter(a=>(a.label||'').trim()||(a.args||'').trim());
+    if(!(g.name||'').trim()){$('#scrMsg').textContent='⚠ дай набору название';return;}
+    if(!g.actions.length&&!g.base){$('#scrMsg').textContent='⚠ добавь хотя бы одну кнопку';return;}
+    const old=JSON.stringify(SC.list);if(SC.edit==='new')SC.list.push(g);else SC.list[SC.edit]=g;
+    if(!await scrSave()){SC.list=JSON.parse(old);return;}
+    SC.edit=null;SC.draft=null;SC.status={};renderScripts();scrRefreshStatus();toast(BRIDGE?'Сохранено в ~/.config/mors-settings/settings.json':'Сохранено (в прототипе — до перезагрузки)');};
+  const del=$('#scrDel');if(del)del.onclick=async()=>{if(!confirm(`Удалить набор «${g.name}»?`))return;SC.list.splice(SC.edit,1);await scrSave();SC.edit=null;SC.status={};renderScripts();scrRefreshStatus();};
+  const up=$('#scrUp');if(up)up.onclick=async()=>{const i=SC.edit;if(i>0){SC.list[i]=g;[SC.list[i-1],SC.list[i]]=[SC.list[i],SC.list[i-1]];SC.edit=i-1;await scrSave();SC.status={};renderScripts();scrRefreshStatus();}};}
+async function scrFishList(){const box=$('#scrFishBox');
+  if(!BRIDGE){box.innerHTML='<div class="hint" style="margin-top:10px">В программе здесь появится список алиасов fish (<code>fish -c alias</code>) — отметь нужные, и они станут кнопками.</div>';return;}
+  box.innerHTML='<div class="hint">читаю алиасы fish…</div>';
+  let list=[];try{list=await BRIDGE.call('fishAliases');}catch(e){box.innerHTML=`<div class="ferr">${esc(e.message)}</div>`;return;}
+  if(!list.length){box.innerHTML='<div class="hint" style="margin-top:10px">Алиасов fish не нашлось (или fish не установлен).</div>';return;}
+  box.innerHTML=`<div style="margin-top:10px;display:flex;flex-direction:column;gap:4px;max-height:260px;overflow:auto">${list.map((a,i)=>`<label style="display:flex;gap:8px;align-items:center;font-size:12.5px"><input type="checkbox" data-fa="${i}"><b>${esc(a.name)}</b><span class="scrcmd" style="margin:0">${esc(a.cmd)}</span></label>`).join('')}</div>
+    <div class="fmtbar"><button class="btn small primary" id="scrFishAdd">Добавить отмеченные в набор «Алиасы fish»</button></div>`;
+  $('#scrFishAdd').onclick=async()=>{const pick=$$('#scrFishBox [data-fa]').filter(c=>c.checked).map(c=>list[+c.dataset.fa]);if(!pick.length)return;
+    let g=SC.list.find(x=>x.name==='Алиасы fish');if(!g){g={name:'Алиасы fish',desc:'запускаются через fish -c',base:'',actions:[]};SC.list.push(g);}
+    pick.forEach(a=>{if(!g.actions.some(x=>x.label===a.name))g.actions.push({label:a.name,args:`fish -c ${JSON.stringify(a.name)}`});});
+    await scrSave();renderScripts();toast(`Добавлено кнопок: ${pick.length}`);};}
+function openPage(p){if(p==='system')openSystem();else if(p==='scripts')openScripts();else if(p==='formats')openFormats();}
+$('#scrBtn').onclick=()=>state.view==='scripts'?selectConfig(cur):openScripts();
 $('#sysBtn').onclick=()=>state.view==='system'?selectConfig(cur):openSystem();
 document.addEventListener('keydown',e=>{if(!(e.ctrlKey||e.metaKey))return;
   if(e.key==='='||e.key==='+'){e.preventDefault();applyZoom(zoom+10);}
@@ -1948,6 +2137,21 @@ document.addEventListener('keydown',e=>{if(!(e.ctrlKey||e.metaKey))return;
   else if(e.key==='0'){e.preventDefault();applyZoom(100);}});
 
 /* ---------- общее ---------- */
+/* программа обновилась после запуска (git pull) — предложить перезапуск */
+function showRestart(text){if(!BRIDGE)return;let el=document.getElementById('restartBar');
+  if(!el){el=document.createElement('div');el.id='restartBar';
+    el.style.cssText='position:fixed;left:50%;top:14px;transform:translateX(-50%);z-index:300;display:flex;gap:12px;align-items:center;max-width:min(760px,92vw);padding:10px 14px;border-radius:10px;background:var(--panel2);border:1px solid var(--accent);box-shadow:0 8px 30px #0008;font-size:13px';
+    document.body.appendChild(el);}
+  el.innerHTML=`<span>⟳ ${esc(text||'Программа обновилась — перезапусти окно, чтобы заработало новое')}</span><button class="btn primary small" id="restartGo">Перезапустить</button><button class="btn small" id="restartNo">Позже</button>`;
+  $('#restartGo').onclick=()=>{if(dirtyCfgAny()&&!confirm('Есть несохранённые изменения — перезапустить всё равно?'))return;el.innerHTML='<span>Перезапускаю…</span>';BRIDGE.call('restart').catch(()=>{});};
+  $('#restartNo').onclick=()=>el.remove();}
+const dirtyCfgAny=()=>configs.some(c=>c.files&&c.files.some(dirtyDoc));
+/* шторки узкого окна */
+function drawer(which,on){const a=$('.app');a.classList.toggle(which,on??!a.classList.contains(which));}
+$('#navBtn').onclick=()=>drawer('shownav');$('#paneBtn').onclick=()=>drawer('showpane');
+$('#drawerBg').onclick=()=>{drawer('shownav',false);drawer('showpane',false);};
+document.addEventListener('keydown',e=>{if(e.key==='Escape'&&!document.querySelector('.modal-bg.open')){drawer('shownav',false);drawer('showpane',false);}});
+$('aside').addEventListener('click',e=>{if(e.target.closest('.cfg,.sysbtn,.subfile:not(.add)'))drawer('shownav',false);});
 let toastT;function toast(msg,warn){const t=$('#toast');t.textContent=msg;t.className='toast show'+(warn?' warn':'');clearTimeout(toastT);toastT=setTimeout(()=>t.className='toast',2800);}
 $('#addCfg').onclick=()=>openModal(false);
 $('#saveBtn').onclick=save;$('#revertBtn').onclick=revert;$('#undoBtn').onclick=undo;

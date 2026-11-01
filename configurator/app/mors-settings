@@ -20,6 +20,22 @@ HERE = pathlib.Path(__file__).resolve().parent              # configurator/app
 DOTS = HERE.parent.parent                                   # корень mors-dots
 RICE = DOTS / 'rice'
 UI = HERE.parent / 'prototype/configurator.html'
+SELF = pathlib.Path(__file__).resolve()
+
+
+def code_sig():
+    """Время изменения кода программы и интерфейса: другое — значит, после запуска был git pull."""
+    out = []
+    for f in (SELF, UI):
+        try:
+            out.append(f.stat().st_mtime_ns)
+        except OSError:
+            out.append(0)
+    return tuple(out)
+
+
+STARTED_SIG = code_sig()
+app_stale = lambda: code_sig() != STARTED_SIG
 HOME = pathlib.Path.home()
 
 
@@ -76,6 +92,8 @@ class Backend:
         self.last_hp_hash = None            # чтобы не принимать собственную запись за внешнюю
         self.backed_up = False
         self.hypr_backed = set()             # резервная копия каждого файла Hyprland — раз за сеанс
+        self.event = lambda ev: None         # события в интерфейс (вывод запущенных скриптов)
+        self.procs = {}                      # запущенные скрипты: run-id → Popen
 
     # ---------------------------------------------------------------- состояние
     def settings(self):
@@ -118,7 +136,7 @@ class Backend:
             text = HP_CONFIG.read_text()
             self.last_hp_hash = hashlib.sha1(text.encode()).hexdigest()
             hp = {'path': '~/' + str(HP_CONFIG.relative_to(HOME)), 'text': text}
-        return {'dots': str(DOTS), 'theme': self.current_theme(), 'repo': self.repo(),
+        return {'dots': str(DOTS), 'theme': self.current_theme(), 'repo': self.repo(), 'stale': app_stale(),
                 'hyprpanel': hp, 'zoom': self.settings().get('zoom', 100),
                 'gear': self.gear_running(), 'open': open}
 
@@ -204,7 +222,99 @@ class Backend:
             run(['hyprctl', 'reload'])
         need = any(c.startswith(('packages/', 'install.sh', 'hosts/', 'rice/sddm')) for c in changed)
         return {'ok': True, 'message': f'✓ обновлено до {self.repo()["commit"][:7]}', 'repo': self.repo(),
-                'needInstall': need, 'keptAside': kept_aside}
+                'needInstall': need, 'keptAside': kept_aside, 'appChanged': app_stale()}
+
+    # ---------------------------------------------------------------- скрипты и кнопки
+    def cmd_scripts(self):
+        lst = self.settings().get('scripts', [])
+        return lst if isinstance(lst, list) else []
+
+    def cmd_saveScripts(self, scripts):
+        if not isinstance(scripts, list):
+            raise ValueError('ожидается список наборов')
+        self.save_settings(scripts=scripts)
+        return scripts
+
+    @staticmethod
+    def _terminal():
+        for t in ('kitty', 'foot', 'alacritty', 'wezterm', 'konsole'):
+            if shutil.which(t):
+                return t
+        return None
+
+    def cmd_runCommand(self, cmd, run=None, cwd=None, term=False, title=None):
+        """Запустить команду кнопки. term — в окне терминала (для интерактивных); иначе вывод идёт событиями
+        {type: 'run', run, line} и в конце {type: 'runDone', run, code}."""
+        cmd = str(cmd or '').strip()
+        if not cmd:
+            raise ValueError('пустая команда')
+        cwd = os.path.expanduser(cwd) if cwd else str(HOME)
+        if not os.path.isdir(cwd):
+            cwd = str(HOME)
+        env = dict(os.environ, MORS_DOTS=str(DOTS))
+        if term:
+            t = self._terminal()
+            if not t:
+                raise RuntimeError('не нашёл терминал (kitty, foot, alacritty…)')
+            hold = f'{cmd}; c=$?; echo; read -p "Готово (код $c). Enter — закрыть " _'
+            argv = {'kitty': ['kitty', '--title', title or cmd], 'foot': ['foot', '--title', title or cmd]}.get(t, [t]) + \
+                   (['-e'] if t in ('alacritty', 'konsole', 'wezterm') else []) + ['sh', '-c', hold]
+            if t == 'wezterm':
+                argv = ['wezterm', 'start', '--', 'sh', '-c', hold]
+            subprocess.Popen(argv, cwd=cwd, env=env, start_new_session=True, stdin=subprocess.DEVNULL)
+            return {'run': run, 'term': t}
+        run = str(run or f'r{len(self.procs) + 1}')
+        p = subprocess.Popen(['sh', '-c', cmd], cwd=cwd, env=env, stdout=subprocess.PIPE, stderr=subprocess.STDOUT,
+                             stdin=subprocess.DEVNULL, text=True, bufsize=1, start_new_session=True)
+        self.procs[run] = p
+
+        def pump():
+            for line in p.stdout:
+                self.event({'type': 'run', 'run': run, 'line': line.rstrip('\n')})
+            code = p.wait()
+            self.procs.pop(run, None)
+            self.event({'type': 'runDone', 'run': run, 'code': code})
+        threading.Thread(target=pump, daemon=True).start()
+        return {'run': run, 'pid': p.pid}
+
+    def cmd_stopCommand(self, run):
+        import signal
+        p = self.procs.get(str(run))
+        if not p:
+            return False
+        try:
+            os.killpg(p.pid, signal.SIGTERM)
+        except ProcessLookupError:
+            pass
+        return True
+
+    def cmd_statusCommand(self, cmd, cwd=None):
+        """Короткая команда статуса набора: код 0 — «работает», вывод — подпись."""
+        cwd = os.path.expanduser(cwd) if cwd else str(HOME)
+        try:
+            p = subprocess.run(['sh', '-c', str(cmd)], cwd=cwd if os.path.isdir(cwd) else str(HOME),
+                               capture_output=True, text=True, timeout=8)
+        except subprocess.TimeoutExpired:
+            return {'code': -1, 'out': 'не ответил за 8 с'}
+        out = (p.stdout or p.stderr or '').strip().splitlines()
+        return {'code': p.returncode, 'out': out[0][:120] if out else ''}
+
+    def cmd_fishAliases(self):
+        """Алиасы fish: «alias name 'команда'» → [{name, cmd}]. Запускать через fish -c name."""
+        import shlex
+        if not shutil.which('fish'):
+            return []
+        code, out = run(['fish', '-c', 'alias'], timeout=10)
+        res = []
+        for line in out.splitlines():
+            try:
+                parts = shlex.split(line)
+            except ValueError:
+                continue
+            parts = [x for x in parts if not x.startswith('--')]
+            if len(parts) >= 3 and parts[0] == 'alias':
+                res.append({'name': parts[1], 'cmd': ' '.join(parts[2:])})
+        return res
 
     def cmd_runInstaller(self):
         term = shutil.which('kitty') or shutil.which('foot') or shutil.which('alacritty')
@@ -309,10 +419,12 @@ class Backend:
          'comment': '#', 'marker': '@', 'follow': True, 'reload': 'pkill -USR1 -x kitty'},
         {'id': 'fastfetch', 'name': 'fastfetch', 'builtin': True, 'path': '~/.config/fastfetch/config.jsonc',
          'format': 'jsonc', 'comment': '//', 'marker': '@', 'follow': False},
+        {'id': 'rofi', 'name': 'rofi', 'builtin': True, 'path': '~/.config/rofi/config.rasi',
+         'format': 'rasi', 'comment': '//', 'marker': '@', 'follow': True},
     ]
     FORMAT_SRC = {   # строки подключения других файлов
         'conf': r'^\s*source\s*=\s*(.+?)\s*$', 'space': r'^\s*include\s+(.+?)\s*$',
-        'ini': r'^\s*include\s*=\s*(.+?)\s*$', 'lua': r'^\s*(?:dofile|require)\s*\(?\s*["\']([^"\']+)["\']\s*\)?\s*$'}
+        'ini': r'^\s*include\s*=\s*(.+?)\s*$', 'rasi': r'^\s*@import\s+"([^"]+)"', 'jsonc': r'(?!)', 'lua': r'^\s*(?:dofile|require)\s*\(?\s*["\']([^"\']+)["\']\s*\)?\s*$'}
 
     def _user_configs(self):
         return self.settings().get('configs', [])
@@ -365,7 +477,11 @@ class Backend:
 
     def cmd_configs(self):
         out = []
+        real = lambda p: pathlib.Path(os.path.expanduser(p)).resolve() if p else None
+        builtin_paths = {real(c['path']) for c in self.BUILTIN if c.get('path')}
         for c in self.BUILTIN + self._user_configs():
+            if not c.get('builtin') and real(c.get('path')) in builtin_paths:
+                continue            # тот же файл уже есть среди встроенных (например rofi, добавленный вручную до обновления)
             c = dict(c)
             try:
                 if c['id'] == 'hyprland':
@@ -394,7 +510,7 @@ class Backend:
         return {**cfg, 'files': self._read_tree(cfg)}
 
     # ---- свои форматы конфигов (страница «Форматы»)
-    BUILTIN_FORMATS = ('conf', 'space', 'ini', 'lua', 'jsonc')
+    BUILTIN_FORMATS = ('conf', 'space', 'ini', 'lua', 'jsonc', 'rasi')
     FORMAT_KEYS = ('label', 'comment', 'sep', 'tail', 're', 'hook', 'quote', 'nest', 'open', 'close', 'join',
                    'src', 'srcTpl', 'check', 'sample')
 
@@ -634,25 +750,79 @@ class Backend:
                          'text': host.read_text() if host.exists() else None},
                 'warmDone': bool(flag and flag.exists())}
 
+    @staticmethod
+    def _mon_state_ok(r, mons):
+        """Совпадает ли то, что реально стоит на мониторе (hyprctl monitors -j), с правилом r. None — монитор не найден."""
+        out = r['output']
+        m = next((x for x in mons if (out.startswith('desc:') and x.get('description') == out[5:]) or x.get('name') == out), None)
+        if m is None:
+            return None, 'монитор не найден'
+        bad = []
+        if int(m.get('transform') or 0) != int(r.get('transform') or 0):
+            bad.append(f'поворот {m.get("transform")} вместо {r.get("transform") or 0}')
+        if abs(float(m.get('scale') or 1) - float(r['scale'])) > 0.01:
+            bad.append(f'масштаб {m.get("scale")}')
+        try:
+            x, y = (int(v) for v in str(r['position']).lower().split('x'))
+            if (m.get('x'), m.get('y')) != (x, y):
+                bad.append(f'позиция {m.get("x")}x{m.get("y")}')
+        except ValueError:
+            pass
+        mode = str(r.get('mode') or '')
+        if '@' in mode and 'x' in mode:
+            res, rate = mode.split('@')
+            w, h = (int(v) for v in res.split('x'))
+            if (m.get('width'), m.get('height')) != (w, h):
+                bad.append(f'разрешение {m.get("width")}x{m.get("height")}')
+            elif abs(float(m.get('refreshRate') or 0) - float(rate)) > 1:
+                bad.append(f'частота {float(m.get("refreshRate") or 0):.0f}')
+        return not bad, ', '.join(bad)
+
+    def _monitors_now(self):
+        code, res = run(['hyprctl', 'monitors', 'all', '-j'], timeout=10)
+        try:
+            return json.loads(res) if code == 0 else []
+        except ValueError:
+            return []
+
     def cmd_applyMonitors(self, rules):
-        """Применить сразу, без перечитывания конфига (иначе сбросится прогрев)."""
+        """Применить сразу, без перечитывания конфига (иначе сбросится прогрев).
+        Поворот передаётся всегда, и 0 тоже: без него Hyprland оставляет старый поворот — экран «залипал» повёрнутым.
+        После применения сверяемся с hyprctl monitors; не совпало — повтор через hyprctl keyword monitor."""
+        import time
         if not shutil.which('hyprctl'):
             raise RuntimeError('нет hyprctl — окно запущено не в Hyprland?')
+        keyword_rule = lambda r: (f'{r["output"]},{r["mode"]},{r["position"]},{float(r["scale"]):g},'
+                                  f'transform,{int(r.get("transform") or 0)}')
         out = []
         for r in rules:
             parts = [f'output = {json.dumps(r["output"])}', f'mode = {json.dumps(r["mode"])}',
-                     f'position = {json.dumps(r["position"])}', f'scale = {float(r["scale"]):g}']
-            if int(r.get('transform') or 0):
-                parts.append(f'transform = {int(r["transform"])}')
+                     f'position = {json.dumps(r["position"])}', f'scale = {float(r["scale"]):g}',
+                     f'transform = {int(r.get("transform") or 0)}']
             lua = 'hl.monitor({ ' + ', '.join(parts) + ' })'
             self.log('$ hyprctl eval ' + lua, 'c')
             code, res = run(['hyprctl', 'eval', lua], timeout=10)
             if not res.strip().startswith('ok'):        # старый .conf-конфиг понимает только keyword
-                out_name = r['output']
-                rule = f'{out_name},{r["mode"]},{r["position"]},{float(r["scale"]):g}' + \
-                       (f',transform,{int(r["transform"])}' if int(r.get('transform') or 0) else '')
-                code, res = run(['hyprctl', 'keyword', 'monitor', rule], timeout=10)
+                code, res = run(['hyprctl', 'keyword', 'monitor', keyword_rule(r)], timeout=10)
             out.append({'output': r['output'], 'ok': code == 0, 'out': res.strip()})
+        # Hyprland применяет монитор не мгновенно — ждём и сверяем
+        for attempt in range(2):
+            time.sleep(0.6)
+            mons = self._monitors_now()
+            if not mons:
+                break
+            redo = []
+            for r, o in zip(rules, out):
+                ok, why = self._mon_state_ok(r, mons)
+                o['ok'] = bool(ok) if ok is not None else o['ok']
+                o['out'] = 'применилось' if ok else (why or o['out'])
+                if ok is False:
+                    redo.append(r)
+            if not redo or attempt:
+                break
+            for r in redo:                              # второй способ
+                self.log('$ hyprctl keyword monitor ' + keyword_rule(r), 'c')
+                run(['hyprctl', 'keyword', 'monitor', keyword_rule(r)], timeout=10)
         return out
 
     def cmd_writeHost(self, text):
@@ -734,7 +904,61 @@ def ensure_session_env():
 
 
 # ======================================================================== окно
+# ---------------------------------------------------------------- значок и пункт в меню приложений
+SHARE = HOME / '.local/share'
+DESKTOP_FILE = SHARE / 'applications' / f'{APP_ID}.desktop'
+ICON_FILE = SHARE / 'icons/hicolor/scalable/apps' / f'{APP_ID}.svg'
+
+
+def desktop_install(quiet=True):
+    """Положить .desktop и значок в ~/.local/share (только если изменились) — программа появится в rofi и меню.
+    Exec — абсолютный путь к этой копии программы."""
+    import re
+    src = HERE / 'share'
+    exe = str(SELF)                          # кавычки по правилам .desktop, а не shell
+    if re.search(r'[\s"\'\\$`<>~|&;*?#()]', exe):
+        exe = '"' + re.sub(r'(["`$\\])', r'\\\1', exe) + '"'
+    want = {
+        DESKTOP_FILE: (src / 'mors-settings.desktop').read_text().replace('@EXEC@', exe),
+        ICON_FILE: (src / 'mors-settings.svg').read_text(),
+    }
+    changed = []
+    for path, text in want.items():
+        try:
+            if path.read_text() == text:
+                continue
+        except OSError:
+            pass
+        path.parent.mkdir(parents=True, exist_ok=True)
+        path.write_text(text)
+        changed.append(path)
+    if changed:
+        for cmd in (['update-desktop-database', '-q', str(DESKTOP_FILE.parent)],
+                    ['gtk-update-icon-cache', '-q', '-t', '-f', str(SHARE / 'icons/hicolor')]):
+            if shutil.which(cmd[0]):
+                subprocess.run(cmd, capture_output=True)
+    if not quiet:
+        print('\n'.join(f'✓ {p}' for p in changed) or '✓ уже установлено')
+    return changed
+
+
+def desktop_uninstall():
+    for p in (DESKTOP_FILE, ICON_FILE):
+        try:
+            p.unlink(); print(f'✗ {p}')
+        except FileNotFoundError:
+            pass
+
+
 def main():
+    if '--install' in sys.argv:             # mors-settings --install — значок и пункт меню, без окна
+        desktop_install(quiet=False); return
+    if '--uninstall' in sys.argv:
+        desktop_uninstall(); return
+    try:
+        desktop_install()                    # при каждом запуске: после git pull обновится сам
+    except Exception as e:
+        print('mors-settings: не положил .desktop:', e, file=sys.stderr)
     ensure_session_env()
     import gi
     gi.require_version('Gtk', '3.0')
@@ -750,6 +974,7 @@ def main():
 
     GLib.set_prgname('mors-settings')
     GLib.set_application_name('Настройки')
+    Gtk.Window.set_default_icon_name(APP_ID)     # значок окна = значок из ~/.local/share/icons
 
     class App(Gtk.Application):
         def __init__(self):
@@ -758,6 +983,7 @@ def main():
             self.monitors = []
             self.backend = Backend(log=lambda text, kind='': self.emit({'type': 'log', 'text': text, 'kind': kind}))
             self.backend.picker = self.pick_gtk
+            self.backend.event = self.emit
             self.open_page = None
 
         # ---- JS <-> Python
@@ -784,10 +1010,17 @@ def main():
             if os.environ.get('MORS_DEBUG'):
                 print('bridge:', msg['cmd'], file=sys.stderr, flush=True)
             fn = getattr(self.backend, 'cmd_' + msg['cmd'], None)
+            if msg['cmd'] == 'restart':                     # перезапуск: новый процесс, этот — закрыть
+                self.reply(msg['id'], True, True)
+                GLib.timeout_add(300, self.restart)
+                return
 
             def work():
                 try:
                     if not fn:
+                        if app_stale():
+                            raise ValueError('STALE|Программа обновилась после запуска, а работает ещё старая — '
+                                             'перезапусти окно, и «' + msg['cmd'] + '» заработает')
                         raise ValueError('неизвестная команда ' + msg['cmd'])
                     args = msg.get('args') or {}
                     if msg['cmd'] == 'state':
@@ -846,11 +1079,18 @@ def main():
                 self.backend.last_hp_hash = h
                 self.emit({'type': 'hyprpanel', 'text': text, 'external': True})
 
+        def restart(self):
+            subprocess.Popen(['sh', '-c', 'sleep 0.5; exec "$0" "$@"', sys.executable, str(SELF)],
+                             start_new_session=True, stdin=subprocess.DEVNULL)
+            self.quit()
+            return False
+
         # ---- жизненный цикл
         def do_command_line(self, cmdline):
             args = cmdline.get_arguments()[1:]
-            if '--system' in args:
-                self.open_page = 'system'
+            for page in ('system', 'scripts', 'formats'):
+                if '--' + page in args:
+                    self.open_page = page
             if self.win:
                 if self.open_page:
                     self.emit({'type': 'open', 'page': self.open_page}); self.open_page = None
