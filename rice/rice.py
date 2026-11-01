@@ -679,6 +679,54 @@ def apply_wallpaper(t, transition="fade"):
         run(tool, "img", "-o", ",".join(rest), str(t.wallpaper), *trans)
 
 
+# ---------------------------------------------------------------- экран входа и блокировки: свои настройки
+# rice/login.json (у каждой машины свой, не в git) — пишет mors-settings, «Система → Экран входа и блокировки»:
+#   image  — "theme" (обои темы) или путь к своей картинке, общая для входа и блокировки
+#   sddm   — ключи темы sddm-astronaut поверх цветов темы (FormPosition, Blur, DimBackground…)
+#   lock   — экран блокировки hyprlock: image (login | theme | screenshot), blur, brightness, clock, date
+LOGIN_FILE = RICE_DIR / "login.json"
+SDDM_KEYS = {   # что можно переопределить — и только это (остальное у темы rice)
+    "FormPosition", "Blur", "BlurMax", "PartialBlur", "FullBlur", "DimBackground", "HaveFormBackground",
+    "CropBackground", "HourFormat", "DateFormat", "HeaderText", "HideVirtualKeyboard", "HideSystemButtons",
+    "RoundCorners", "ForceLastUser", "UseRealName",
+}
+LOCK_DEFAULTS = {"image": "login", "blur": 2, "brightness": 0.75, "clock": True, "date": True, "font": "Sans"}
+
+
+def login_settings():
+    try:
+        d = json.loads(LOGIN_FILE.read_text())
+        return d if isinstance(d, dict) else {}
+    except (OSError, ValueError):
+        return {}
+
+
+def login_image(t):
+    """Картинка экрана входа: своя из login.json (если файл на месте) или обои темы."""
+    img = login_settings().get("image") or "theme"
+    if img != "theme":
+        f = Path(os.path.expanduser(img))
+        if f.is_file():
+            return f
+    return t.wallpaper
+
+
+def save_png(src, dst):
+    """Копия картинки в PNG: тема SDDM ждёт файл rice.png, а Qt по расширению выбирает декодер."""
+    tmp = dst.with_name(dst.name + ".tmp")
+    if src.suffix.lower() == ".png":
+        shutil.copyfile(src, tmp)
+    else:
+        try:
+            import gi
+            gi.require_version("GdkPixbuf", "2.0")
+            from gi.repository import GdkPixbuf
+            GdkPixbuf.Pixbuf.new_from_file(str(src)).savev(str(tmp), "png", [], [])
+        except Exception:
+            shutil.copyfile(src, tmp)            # без GdkPixbuf — как есть, Qt обычно угадывает формат по содержимому
+    os.replace(tmp, dst)
+
+
 # ---------------------------------------------------------------- SDDM (экран входа)
 def apply_sddm(t):
     """Пишет переопределение темы sddm-astronaut в /var/lib/rice (один раз настраивается sddm-setup.sh)."""
@@ -705,18 +753,63 @@ def apply_sddm(t):
         "HoverSystemButtonsIconsColor": P, "HoverSessionButtonTextColor": P,
         "HoverVirtualKeyboardButtonTextColor": P,
     }
+    user = login_settings().get("sddm") or {}
+    conf.update({k: str(v).replace('"', "'") for k, v in user.items() if k in SDDM_KEYS})
     text = f"# Сгенерировано rice.py — {t.raw['name']}\n[General]\n" + "".join(f'{k}="{v}"\n' for k, v in conf.items())
     write(SDDM_DIR / "sddm.conf.user", text)
-    shutil.copyfile(t.wallpaper, SDDM_DIR / "sddm-bg.png.tmp")
-    os.replace(SDDM_DIR / "sddm-bg.png.tmp", SDDM_DIR / "sddm-bg.png")
+    save_png(login_image(t), SDDM_DIR / "sddm-bg.png")
     return "ok"
+
+
+# ---------------------------------------------------------------- экран блокировки (hyprlock)
+def hl_color(h, alpha=None):
+    h = h.lstrip("#")[:6]
+    return f"rgba({h}{alpha:02x})" if alpha is not None else f"rgb({h})"
+
+
+def apply_hyprlock(t):
+    """~/.config/hypr/hyprlock.conf в цветах темы. Без этого файла hyprlock не запускается вовсе —
+    и блокировка по простою (hypridle) ничего бы не делала."""
+    p, P = t.p, t.primary
+    L = {**LOCK_DEFAULTS, **(login_settings().get("lock") or {})}
+    if L["image"] == "screenshot":
+        bg = "screenshot"
+    else:
+        img = t.wallpaper if L["image"] == "theme" else login_image(t)
+        bg = str(img) if img else ""
+    blur = max(0, min(4, int(L.get("blur") or 0)))
+    bright = max(0.2, min(1.0, float(L.get("brightness") or 1)))
+    font = str(L.get("font") or "Sans").replace("\n", " ")
+    out = [f"# Сгенерировано rice.py — {t.raw['name']}. Вид меняется в mors-settings → Система → Экран входа и блокировки.",
+           "general {", "    hide_cursor = true", "    ignore_empty_input = true", "}", "",
+           "background {", "    monitor =", f"    path = {bg}", f"    color = {hl_color(p['base'])}",
+           f"    blur_passes = {blur}", "    blur_size = 7", f"    brightness = {bright:.2f}", "}", "",
+           "input-field {", "    monitor =", "    size = 320, 54", "    outline_thickness = 2", "    rounding = 14",
+           f"    outer_color = {hl_color(P)} {hl_color(t.secondary)} 45deg",
+           f"    inner_color = {hl_color(p['crust'], 0xcc)}", f"    font_color = {hl_color(p['text'])}",
+           f"    check_color = {hl_color(t.secondary)}", f"    fail_color = {hl_color(p['red'])}",
+           f"    capslock_color = {hl_color(p['yellow'] if 'yellow' in p else P)}",
+           f"    font_family = {font}", "    placeholder_text = <i>Пароль…</i>", "    fail_text = <i>$PAMFAIL</i>",
+           "    fade_on_empty = false", "    dots_spacing = 0.3",
+           "    position = 0, -60", "    halign = center", "    valign = center", "}"]
+    if L.get("clock", True):
+        out += ["", "label {", "    monitor =", "    text = $TIME", "    font_size = 84", f"    font_family = {font}",
+                f"    color = {hl_color(p['text'])}", "    position = 0, 160", "    halign = center", "    valign = center", "}"]
+    if L.get("date", True):
+        out += ["", "label {", "    monitor =", '    text = cmd[update:60000] LC_TIME=ru_RU.UTF-8 date +"%A, %-d %B"',
+                "    font_size = 20", f"    font_family = {font}", f"    color = {hl_color(p['subtext1'])}",
+                "    position = 0, 80", "    halign = center", "    valign = center", "}"]
+    out += ["", "label {", "    monitor =", "    text = $LAYOUT[en,ru]", "    font_size = 14", f"    font_family = {font}",
+            f"    color = {hl_color(p['overlay1'])}", "    position = 0, -120", "    halign = center", "    valign = center", "}", ""]
+    write(CFG / "hypr/hyprlock.conf", "\n".join(out))
+    return "ok" if bg else "нет обоев у темы — фон будет цветом"
 
 
 # ---------------------------------------------------------------- main
 STEPS = [
     ("Hyprland", apply_hyprland), ("HyprPanel", apply_hyprpanel), ("Kitty", apply_kitty),
     ("Rofi", apply_rofi), ("Qt/KDE", apply_kde), ("GTK", apply_gtk), ("Fish", apply_fish),
-    ("Обои", apply_wallpaper), ("SDDM", apply_sddm),
+    ("Обои", apply_wallpaper), ("SDDM", apply_sddm), ("Блокировка", apply_hyprlock),
 ]
 
 
@@ -770,6 +863,7 @@ def main(argv):
         t = Theme(name)
         apply_wallpaper(t)
         apply_sddm(t)
+        apply_hyprlock(t)
         print(f"{t.raw['name']}: обои {i + 1}/{n} — {t.wallpaper.name}")
     elif cmd == "wallpapers":
         name = argv[2] if len(argv) > 2 else current()
@@ -798,7 +892,19 @@ def main(argv):
         t = Theme(name)
         apply_wallpaper(t)
         apply_sddm(t)
+        apply_hyprlock(t)
         print(f"{t.raw['name']}: {f.name}")
+    elif cmd == "login":         # только экран входа и блокировки — после правки rice/login.json
+        name = current()
+        if not name:
+            print("тема не выбрана"); return 1
+        t = Theme(name)
+        for label, fn in (("SDDM", apply_sddm), ("Блокировка", apply_hyprlock)):
+            try:
+                res = fn(t)
+                print(f"  ✓ {label}" + (f": {res}" if isinstance(res, str) and res != "ok" else ""))
+            except Exception as e:
+                print(f"  ✗ {label}: {e}")
     elif cmd == "wallpaper":
         if current():   # при входе — без анимации; «rice.py wallpaper fade» — с ней
             apply_wallpaper(Theme(current()), transition="fade" if "fade" in argv[2:] else "none")

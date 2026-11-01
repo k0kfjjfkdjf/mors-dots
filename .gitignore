@@ -2,10 +2,15 @@
 config/hypr/lua/theme.lua
 config/kitty/theme.conf
 config/rofi/colors.rasi
+config/hypr/hyprlock.conf
 config/fish/conf.d/rice-theme.fish
 rice/current
 rice/wallpaper-index.json
 rice/monitor-wallpapers.json
+rice/login.json
+
+# пишет mors-settings (Система → Электропитание): у каждой машины своё
+config/hypr/hypridle.conf
 
 # машинное: ссылку создаёт install.sh
 config/hypr/lua/host.lua

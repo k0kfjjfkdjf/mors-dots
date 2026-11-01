@@ -144,6 +144,36 @@ input[type=color]{width:34px;height:28px;border:1px solid var(--border);border-r
 .sysbtn small{display:block;font-weight:400;color:var(--muted);font-size:11px}
 .sysview{flex:1;overflow:auto;padding:20px;min-height:0}
 .sysview[hidden],.content[hidden]{display:none!important}
+/* экран входа и электропитание */
+.lwrap{display:grid;grid-template-columns:minmax(260px,1fr) minmax(300px,1.1fr);gap:18px;align-items:start}
+.lmock{position:relative;aspect-ratio:16/10;border-radius:12px;overflow:hidden;background:var(--bg);border:1px solid var(--border)}
+.lbg{position:absolute;inset:-12px;background:var(--panel2) center/cover no-repeat}
+.ldim{position:absolute;inset:0;background:#000;opacity:var(--dim)}
+.lrow{position:absolute;inset:0;display:flex;align-items:stretch}
+.lform{width:38%;min-width:120px;display:flex;flex-direction:column;justify-content:center;gap:5px;padding:12px 14px;background:color-mix(in srgb,var(--bg) 82%,transparent)}
+.lform.nobg{background:none}.lform.pblur{backdrop-filter:blur(var(--bl));background:color-mix(in srgb,var(--bg) 45%,transparent)}
+.lform.nobg.pblur{background:none}
+.lhead{font-size:10px;color:var(--muted);text-align:center}
+.ltime{font-size:26px;font-weight:700;text-align:center;color:var(--text);line-height:1.1}.ldate{font-size:10px;text-align:center;color:var(--muted);margin-bottom:6px;text-transform:capitalize}
+.lfield{height:18px;border-radius:5px;background:var(--surf);font-size:9px;color:var(--muted);padding:3px 7px}
+.lbtn{height:16px;border-radius:5px;background:var(--accent);margin-top:2px}
+.lcap{position:absolute;right:8px;bottom:6px;font-size:10px;color:#fffa;text-shadow:0 1px 3px #000}
+.lsub{font-weight:600;font-size:13px;margin:12px 0 8px}.lctl .lsub:first-child{margin-top:0}
+.lgrid{display:grid;grid-template-columns:1fr 1fr;gap:8px 14px}
+.lgrid>label{display:flex;flex-direction:column;gap:4px;font-size:12px;color:var(--muted)}
+.lgrid>label.wide{grid-column:1/-1}
+.lgrid select,.lgrid input[type=text],.ptable select{background:var(--bg);border:1px solid var(--border);color:var(--text);border-radius:7px;padding:6px 9px;font:inherit;font-size:13px;outline:none}
+.lrng{display:flex;align-items:center;gap:8px}.lrng input{flex:1}.lrng b{font-family:var(--mono);font-size:12px;color:var(--text);min-width:30px}
+.lchk{display:flex !important;flex-direction:row !important;align-items:center;gap:8px;font-size:12.5px;color:var(--text) !important;margin:4px 0}
+.lseg{margin-bottom:6px}.lpath{font-family:var(--mono);font-size:11.5px;color:var(--muted);word-break:break-all}.lpath.bad{color:var(--danger)}
+.ptable{border-collapse:collapse;margin:6px 0 10px;width:100%;max-width:640px}
+.ptable th{font-size:12px;color:var(--muted);text-align:left;font-weight:500;padding:4px 8px}
+.ptable td{padding:5px 8px;border-top:1px solid var(--line);font-size:13px;vertical-align:middle}
+.ptable td small{display:block;color:var(--dim);font-size:11px}
+.ptable td .pcell{display:flex;gap:6px;flex-wrap:wrap}.ptable td:first-child{white-space:nowrap;width:1%;padding-right:18px}.ptable.off{opacity:.5}
+.actions .hint{font-size:12px;color:var(--muted)}
+@media (max-width:1100px){.lwrap{grid-template-columns:1fr}}
+@media (max-width:600px){.lgrid{grid-template-columns:1fr}}
 /* страница «Скрипты» */
 .scrgrid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:14px;align-items:start}
 .scrbtns{display:flex;flex-wrap:wrap;gap:6px;margin-top:10px}
@@ -1577,7 +1607,7 @@ function applyZoom(z,persist=true){z=Math.max(60,Math.min(200,Math.round(z)));zo
 /* ---------- страница «Система» ---------- */
 function openSystem(){if(state.capturing)stopCapture();state.view='system';$('#content').hidden=true;$('#fmtview').hidden=true;$('#scrview').hidden=true;$('#sysview').hidden=false;renderSidebar();renderTop();renderSystem();
   if(BRIDGE){BRIDGE.call('state').then(st=>{SYS.repo=st.repo;SYS.gear=st.gear;renderSystem();}).catch(()=>{});loadWallpapers();}
-  loadDisplays();}
+  loadDisplays();if(!SYS.login||!SYS.login.dirty)loadLogin();if(!SYS.power||(!SYS.power.dirty&&!SYS.power.lgDirty))loadPower();}
 function closeSystem(){state.view='cfg';$('#sysview').hidden=true;$('#fmtview').hidden=true;$('#scrview').hidden=true;$('#content').hidden=false;}
 function termAdd(text,kind){SYS.term.push({text,kind});if(SYS.term.length>400)SYS.term.splice(0,SYS.term.length-400);
   const el=document.getElementById('term');if(el){el.insertAdjacentHTML('beforeend',termLine(SYS.term[SYS.term.length-1]));el.scrollTop=el.scrollHeight;}}
@@ -1599,6 +1629,12 @@ function renderSystem(){
     <section class="card"><h2>Обои${SYS.wp&&SYS.wp.theme?' — '+esc((RICE.themes[SYS.wp.theme]||{}).name||SYS.wp.theme):''}</h2>
       <div class="sub">У каждой темы своя папка <code>~/.config/rice/wallpapers/&lt;тема&gt;/</code> — всё, что туда положишь (png, jpg, webp, gif), появится здесь само. Для новой темы папка создаётся автоматически.</div>
       ${wallpapersHTML()}</section>
+    <section class="card"><h2>Экран входа и блокировки</h2>
+      <div class="sub">Своя картинка вместо обоев темы, положение формы, размытие и затемнение — для входа в систему (SDDM) и для экрана блокировки (hyprlock). Цвета берутся из темы rice.</div>
+      ${loginHTML()}</section>
+    <section class="card"><h2>Электропитание</h2>
+      <div class="sub">Когда блокировать экран, гасить мониторы и уходить в сон — отдельно от сети и от батареи. Работает через hypridle; пока не нажмёшь «Применить», ничего не меняется.</div>
+      ${powerHTML()}</section>
     <section class="card"><h2>Масштаб интерфейса</h2>
       <div class="sub">Размер всего в окне настроек. Применяется сразу. <kbd>Ctrl</kbd>+<kbd>+</kbd> / <kbd>Ctrl</kbd>+<kbd>−</kbd> / <kbd>Ctrl</kbd>+<kbd>0</kbd>.</div>
       <div class="seg" id="zoomSeg"></div></section>
@@ -1622,7 +1658,7 @@ function renderSystem(){
     if(!BRIDGE){SYS.wp.current=rel;SYS.mon.default={rel,uri:wpUri(rel)};renderSystem();return;}
     try{await BRIDGE.call('setWallpaper',{rel});SYS.wp.current=rel;if(SYS.mon)SYS.mon.default={rel,uri:wpUri(rel)};renderSystem();termAdd('✓ обои: '+rel,'ok');}catch(e){termAdd('✗ '+e.message,'err');}});
   el.querySelectorAll('[data-mon]').forEach(b=>b.onclick=()=>{SYS.monSel=b.dataset.mon;renderSystem();});
-  bindCrop();bindDisplays();
+  bindCrop();bindDisplays();bindLogin();bindPower();
   const wi=$('#wpImport');if(wi)wi.onclick=async()=>{if(!BRIDGE){toast('В программе откроется окно выбора картинок KDE — они скопируются в папку темы');return;}
     try{const r=await BRIDGE.call('importWallpapers');if(r.added.length){termAdd('✓ добавлены обои: '+r.added.join(', '),'ok');loadWallpapers();}}catch(e){toast(e.message,true);}};
   const wo=$('#wpOpen');if(wo)wo.onclick=()=>BRIDGE?BRIDGE.call('openWallpaperFolder'):toast('В программе откроется папка темы');
@@ -1864,6 +1900,149 @@ async function updateRice(){if(SYS.busy)return;
     termAdd(r.message,r.ok?'ok':'err');if(r.appChanged)showRestart('Райс обновлён, и конфигуратор вместе с ним — перезапусти окно, чтобы заработало новое');if(r.needInstall)termAdd('! изменились пакеты или установщик — нажми «Запустить установщик в терминале»','err');}
   catch(e){termAdd('✗ '+e.message,'err');}
   setBusy('');renderSystem();}
+/* ---------- экран входа и блокировки ---------- */
+const SDDM_DEF={FormPosition:'left',Blur:'1.0',BlurMax:'32',PartialBlur:'false',FullBlur:'false',DimBackground:'0.0',HaveFormBackground:'true',
+  HourFormat:'HH:mm',DateFormat:'dddd d MMMM',HeaderText:'',HideVirtualKeyboard:'false'};
+const LOCK_DEF={image:'login',blur:2,brightness:0.75,clock:true,date:true};
+async function loadLogin(){let st;
+  if(BRIDGE){try{st=await BRIDGE.call('loginState');}catch(e){st=null;}}
+  else st={settings:{},sddmReady:false,sddmSetup:'~/.config/rice/sddm-setup.sh',hyprlockConf:false,hyprlock:true,preview:null};
+  if(!st){SYS.login=null;return;}
+  const s=st.settings||{};
+  SYS.login={st,d:{image:s.image||'theme',sddm:{...SDDM_DEF,...(s.sddm||{})},lock:{...LOCK_DEF,...(s.lock||{})}},dirty:false};
+  if(state.view==='system')renderSystem();}
+function loginHTML(){const L=SYS.login;if(!L)return '<div class="note">Читаю настройки экрана входа…</div>';
+  const d=L.d,s=d.sddm,k=d.lock,st=L.st,b=v=>String(v)==='true';
+  const bg=d.image==='theme'?(st.preview||(SYS.mon&&SYS.mon.default&&SYS.mon.default.uri)||''):(L.customPreview||st.preview||'');
+  const blurMode=b(s.FullBlur)?'full':b(s.PartialBlur)?'partial':'none',bl=+s.Blur||0;
+  const pos={left:'flex-start',center:'center',right:'flex-end'}[s.FormPosition]||'flex-start';
+  const now=new Date(),hh=s.HourFormat.startsWith('hh')?((now.getHours()%12)||12):now.getHours(),tm=`${String(hh).padStart(2,'0')}:${String(now.getMinutes()).padStart(2,'0')}${s.HourFormat.includes('AP')?(now.getHours()<12?' AM':' PM'):''}`;
+  const sel=(id,v,opts)=>`<select data-l="${id}">${opts.map(([a,t])=>`<option value="${a}" ${String(v)===a?'selected':''}>${esc(t)}</option>`).join('')}</select>`;
+  const rng=(id,v,min,max,step)=>`<span class="lrng"><input type="range" data-l="${id}" min="${min}" max="${max}" step="${step}" value="${v}"><b>${v}</b></span>`;
+  const chk=(id,v,t)=>`<label class="lchk"><input type="checkbox" data-l="${id}" ${v?'checked':''}>${t}</label>`;
+  return `${st.sddmReady?'':`<div class="note">Экран входа ещё не подключён к rice: один раз нужен пароль — <code>sddm-setup.sh</code> даст rice.py право менять его без sudo.
+      <button class="btn small" id="sddmSetup">Подключить (в терминале)</button></div>`}
+    <div class="lwrap">
+      <div class="lmock" style="--dim:${+s.DimBackground||0}">
+        <div class="lbg" style="${bg?`background-image:url(${bg})`:''};${blurMode==='full'?`filter:blur(${Math.max(1,bl*3)}px)`:''}"></div><div class="ldim"></div>
+        <div class="lrow" style="justify-content:${pos}">
+          <div class="lform ${b(s.HaveFormBackground)?'':'nobg'} ${blurMode==='partial'?'pblur':''}" style="--bl:${Math.max(1,bl*4)}px">
+            ${s.HeaderText?`<div class="lhead">${esc(s.HeaderText)}</div>`:''}<div class="ltime">${tm}</div><div class="ldate">${esc(s.DateFormat.includes('MMMM')?now.toLocaleDateString('ru-RU',{weekday:'long',day:'numeric',month:'long'}):now.toLocaleDateString('ru-RU'))}</div>
+            <div class="lfield">mors</div><div class="lfield">••••••</div><div class="lbtn"></div></div></div>
+        <div class="lcap">так примерно будет выглядеть вход</div></div>
+      <div class="lctl">
+        <div class="lsub">Картинка (общая для входа и блокировки)</div>
+        <div class="seg lseg"><button class="${d.image==='theme'?'on':''}" data-limg="theme">Обои темы</button><button class="${d.image!=='theme'?'on':''}" id="lPick">Своя…</button></div>
+        ${d.image!=='theme'?`<div class="lpath ${st.missing&&!L.customPreview?'bad':''}">${esc(d.image)}${st.missing&&!L.customPreview?' — файла нет, будут обои темы':''}</div>`:'<div class="lpath">меняется вместе с обоями темы</div>'}
+        <div class="lsub">Экран входа (SDDM)</div>
+        <div class="lgrid">
+          <label>Форма${sel('sddm.FormPosition',s.FormPosition,[['left','слева'],['center','по центру'],['right','справа']])}</label>
+          <label>Размытие${sel('blurMode',blurMode,[['none','нет'],['partial','под формой'],['full','весь фон']])}</label>
+          <label>Сила размытия${rng('sddm.Blur',bl,0,3,0.5)}</label>
+          <label>Затемнение${rng('sddm.DimBackground',+s.DimBackground||0,0,0.9,0.05)}</label>
+          <label>Часы${sel('sddm.HourFormat',s.HourFormat,[['HH:mm','24 часа'],['hh:mm AP','12 часов']])}</label>
+          <label>Дата${sel('sddm.DateFormat',s.DateFormat,[['dddd d MMMM','понедельник 3 ноября'],['dddd d','понедельник 3'],['d MMMM yyyy','3 ноября 2026'],['dd.MM.yyyy','03.11.2026']])}</label>
+          <label class="wide">Надпись сверху<input type="text" data-l="sddm.HeaderText" value="${esc(s.HeaderText)}" placeholder="пусто — без надписи"></label>
+          ${chk('sddm.HaveFormBackground',b(s.HaveFormBackground),'подложка под формой')}${chk('sddm.HideVirtualKeyboard',b(s.HideVirtualKeyboard),'скрыть экранную клавиатуру')}
+        </div>
+        <div class="lsub">Экран блокировки (hyprlock)</div>
+        <div class="lgrid">
+          <label>Фон${sel('lock.image',k.image,[['login','как на входе'],['theme','обои темы'],['screenshot','снимок экрана']])}</label>
+          <label>Размытие${rng('lock.blur',k.blur,0,4,1)}</label>
+          <label>Яркость${rng('lock.brightness',k.brightness,0.3,1,0.05)}</label>
+          <span></span>${chk('lock.clock',k.clock,'часы')}${chk('lock.date',k.date,'дата')}
+        </div>
+        <div class="actions"><button class="btn primary" id="lApply" ${L.dirty?'':'disabled'}>Применить</button>
+          <button class="btn" id="lTest" title="Заблокирует экран прямо сейчас — разблокировать паролем">🔒 Проверить блокировку</button>
+          ${st.hyprlock?'':'<span class="pill off"><i></i>нет hyprlock</span>'}</div>
+      </div></div>`;}
+function bindLogin(){const L=SYS.login;if(!L)return;const d=L.d;
+  const mark=()=>{L.dirty=true;setTimeout(renderSystem,0);};   // не в обработчике: поле может как раз терять фокус
+  $$('#sysview [data-l]').forEach(el=>{const id=el.dataset.l;
+    const set=v=>{if(id==='blurMode'){d.sddm.PartialBlur=String(v==='partial');d.sddm.FullBlur=String(v==='full');return;}
+      const [g,key]=id.split('.');let x=el.type==='checkbox'?el.checked:v;
+      if(g==='sddm')x=String(x);else if(el.type==='range')x=+x;d[g][key]=x;};
+    if(el.type==='range')el.oninput=()=>{el.nextElementSibling.textContent=el.value;};
+    if(el.type==='text'){el.oninput=()=>{set(el.value);L.dirty=true;const a=$('#lApply');if(a)a.disabled=false;
+        const h=document.querySelector('.lhead');if(h)h.textContent=el.value;};return;}
+    el.onchange=()=>{set(el.value);mark();};});
+  $$('#sysview [data-limg]').forEach(b=>b.onclick=()=>{d.image='theme';L.customPreview=null;mark();});
+  const pk=$('#lPick');if(pk)pk.onclick=async()=>{const p=await pickPath('image',d.image!=='theme'?d.image:'~/Изображения');
+    if(!p)return;d.image=p;L.customPreview=null;
+    if(BRIDGE){try{L.customPreview=await BRIDGE.call('thumb',{path:p});}catch(e){}}
+    mark();};
+  const ap=$('#lApply');if(ap)ap.onclick=async()=>{const s={image:d.image,sddm:d.sddm,lock:d.lock};
+    termAdd('$ rice.py login','c');
+    if(!BRIDGE){L.dirty=false;termAdd('(имитация) экран входа и блокировки обновлены','ok');renderSystem();return;}
+    ap.disabled=true;try{const r=await BRIDGE.call('saveLogin',{settings:s});L.st=r;L.dirty=false;
+      termAdd(r.ok?'✓ экран входа и блокировки обновлены — вход увидишь при следующем входе в систему':'✗ rice.py login завершился с ошибкой',r.ok?'ok':'err');}
+    catch(e){termAdd('✗ '+e.message,'err');}renderSystem();};
+  const tl=$('#lTest');if(tl)tl.onclick=async()=>{if(L.dirty){toast('Сначала «Применить» — иначе блокировка покажет старый вид',true);return;}
+    if(!BRIDGE){toast('В программе экран заблокируется прямо сейчас (hyprlock)');return;}
+    try{await BRIDGE.call('testLock');}catch(e){toast(e.message,true);}};
+  const ss=$('#sddmSetup');if(ss)ss.onclick=()=>runCommand(L.st.sddmSetup,{term:true,label:'Подключить экран входа'}).then(()=>setTimeout(loadLogin,4000));}
+
+/* ---------- электропитание ---------- */
+const PW_MIN=[0,1,2,3,5,7,10,15,20,25,30,45,60,90,120,180];
+const PW_DEF=()=>({enabled:true,ac:{dim:0,lock:10,screen:11,sleep:30,action:'suspend'},bat:{dim:2,lock:5,screen:6,sleep:10,action:'suspend'},lockBeforeSleep:true,inhibit:true});
+const LOGIND_OPTS=[['poweroff','выключить'],['suspend','сон'],['hibernate','гибернация'],['suspend-then-hibernate','сон, потом гибернация'],['lock','заблокировать'],['ignore','ничего']];
+async function loadPower(){let st;
+  if(BRIDGE){try{st=await BRIDGE.call('power');}catch(e){st=null;}}
+  else st={settings:null,battery:true,backlight:true,lid:true,onBattery:false,hypridle:true,hypridleRunning:false,hypridleConf:false,brightnessctl:true,canSuspend:true,canHibernate:false,
+    logind:{HandlePowerKey:'poweroff',HandleLidSwitch:'suspend',HandleLidSwitchExternalPower:'suspend',HandleLidSwitchDocked:'ignore'},logindOurs:false};
+  if(!st){SYS.power=null;return;}
+  SYS.power={st,d:st.settings?JSON.parse(JSON.stringify(st.settings)):{...PW_DEF(),enabled:false},lg:{...st.logind},dirty:false,lgDirty:false};
+  if(state.view==='system')renderSystem();}
+function powerHTML(){const P=SYS.power;if(!P)return '<div class="note">Читаю настройки питания…</div>';
+  const st=P.st,d=P.d,cols=st.battery?[['ac','От сети'],['bat','От батареи']]:[['ac','']];
+  const mins=v=>v?(v>=60&&v%60===0?`${v/60} ч`:`${v} мин`):'никогда';
+  const msel=(src,k)=>{const v=+((d[src]||{})[k]||0),opts=[...new Set([...PW_MIN,v])].sort((a,b)=>a-b);
+    return `<select data-p="${src}.${k}" ${d.enabled?'':'disabled'}>${opts.map(m=>`<option value="${m}" ${m===v?'selected':''}>${mins(m)}</option>`).join('')}</select>`;};
+  const act=src=>`<select data-p="${src}.action" ${d.enabled?'':'disabled'}>${[['suspend','сон'],['hibernate','гибернация'+(st.canHibernate===false?' (не настроена)':'')],['suspend-then-hibernate','сон, потом гибернация'],['poweroff','выключить']]
+    .map(([a,t])=>`<option value="${a}" ${(d[src]||{}).action===a?'selected':''} ${a.includes('hibernate')&&st.canHibernate===false?'disabled':''}>${t}</option>`).join('')}</select>`;
+  const rows=[...(st.backlight?[['dim','Приглушить подсветку',st.brightnessctl?'':'нужен brightnessctl']]:[]),['lock','Заблокировать экран'],['screen','Погасить экраны'],['sleep','Затем']];
+  const warn=[];cols.forEach(([src,t])=>{const c=d[src]||{};const n=t?` (${t.toLowerCase()})`:'';
+    if(c.sleep&&c.lock&&c.sleep<=c.lock&&!d.lockBeforeSleep)warn.push(`компьютер уснёт раньше блокировки${n} — включи «блокировать перед сном»`);
+    if(c.screen&&c.lock&&c.screen<c.lock)warn.push(`экраны погаснут раньше блокировки${n} — так можно, но обычно наоборот`);});
+  const status=!st.hypridle?'<span class="pill off"><i></i>нет hypridle — sudo pacman -S hypridle</span>'
+    :st.hypridleRunning?'<span class="pill on"><i></i>hypridle работает</span>':d.enabled&&st.hypridleConf?'<span class="pill off"><i></i>hypridle не запущен</span>':'<span class="pill">сейчас компьютер сам не засыпает и не блокируется</span>';
+  const lsel=k=>`<select data-g="${k}">${LOGIND_OPTS.map(([a,t])=>`<option value="${a}" ${P.lg[k]===a?'selected':''}>${t}</option>`).join('')}</select>`;
+  return `<div class="actions" style="margin-top:0">${status}${st.battery?`<span class="pill">${st.onBattery?'🔋 от батареи':'🔌 от сети'}</span>`:''}</div>
+    <label class="lchk" style="margin:12px 0 4px"><input type="checkbox" data-p="enabled" ${d.enabled?'checked':''}><b>Следить за простоем</b> — что делать, когда никто не трогает мышь и клавиатуру</label>
+    <table class="ptable ${d.enabled?'':'off'}"><tr><th></th>${cols.map(([s,t])=>`<th>${t||'Через'}</th>`).join('')}</tr>
+      ${rows.map(([k,t,note])=>`<tr><td>${t}${note?`<small>${note}</small>`:''}</td>${cols.map(([s])=>`<td><div class="pcell">${msel(s,k)}${k==='sleep'?act(s):''}</div></td>`).join('')}</tr>`).join('')}</table>
+    <label class="lchk"><input type="checkbox" data-p="lockBeforeSleep" ${d.lockBeforeSleep?'checked':''} ${d.enabled?'':'disabled'}>блокировать экран перед сном</label>
+    <label class="lchk"><input type="checkbox" data-p="inhibit" ${d.inhibit?'checked':''} ${d.enabled?'':'disabled'}>не засыпать, пока идёт видео, игра или звонок (если программа сама об этом просит)</label>
+    ${warn.length?`<div class="note err">${warn.map(esc).join('<br>')}</div>`:''}
+    ${!st.hyprlockConf?'<div class="note">Экран блокировки (hyprlock) ещё без настроек — при «Применить» rice.py создаст его в цветах темы.</div>':''}
+    <div class="actions"><button class="btn primary" id="pApply" ${P.dirty?'':'disabled'}>Применить</button>${!st.settings?`<span class="hint">${d.enabled?'подставлены рекомендуемые значения — проверь и примени':'в таблице рекомендуемые значения — включи слежение и примени'}</span>`:''}</div>
+    <div class="lsub" style="margin-top:18px">Кнопка питания${st.lid?' и крышка':''}</div>
+    <div class="sub" style="margin-bottom:8px">Это настройки системы (systemd-logind), они в <code>/etc</code> — при сохранении спросит пароль.</div>
+    <div class="lgrid">
+      <label>Кнопка питания${lsel('HandlePowerKey')}</label>
+      ${st.lid?`<label>Закрыть крышку${st.battery?' (от батареи)':''}${lsel('HandleLidSwitch')}</label>${st.battery?`<label>Закрыть крышку (от сети)${lsel('HandleLidSwitchExternalPower')}</label>`:''}
+        <label>Крышка с внешним монитором${lsel('HandleLidSwitchDocked')}</label>`:''}
+    </div>
+    <div class="actions"><button class="btn" id="gApply" ${P.lgDirty?'':'disabled'}>Сохранить (спросит пароль)</button></div>`;}
+function bindPower(){const P=SYS.power;if(!P)return;const d=P.d;
+  $$('#sysview [data-p]').forEach(el=>el.onchange=()=>{const id=el.dataset.p;
+    if(el.type==='checkbox'){d[id]=el.checked;if(id==='enabled'&&el.checked&&!P.st.settings){const def=PW_DEF();d.ac={...def.ac,...d.ac};d.bat={...def.bat,...d.bat};}}
+    else{const [src,k]=id.split('.');d[src]=d[src]||{};d[src][k]=k==='action'?el.value:+el.value;}
+    P.dirty=true;setTimeout(renderSystem,0);});
+  $$('#sysview [data-g]').forEach(el=>el.onchange=()=>{P.lg[el.dataset.g]=el.value;P.lgDirty=true;setTimeout(renderSystem,0);});
+  const pa=$('#pApply');if(pa)pa.onclick=async()=>{termAdd(d.enabled?'$ hypridle.conf → перезапуск hypridle':'$ pkill hypridle','c');
+    if(!BRIDGE){P.dirty=false;P.st.settings=JSON.parse(JSON.stringify(d));termAdd('(имитация) сохранено','ok');renderSystem();return;}
+    pa.disabled=true;try{const r=await BRIDGE.call('savePower',{settings:d});P.st=r;P.dirty=false;
+      termAdd(d.enabled?(r.hypridleRunning?'✓ hypridle перезапущен с новыми настройками':'! настройки записаны, но hypridle не запустился'):'✓ слежение за простоем выключено',r.hypridleRunning||!d.enabled?'ok':'err');}
+    catch(e){termAdd('✗ '+e.message,'err');}renderSystem();};
+  const ga=$('#gApply');if(ga)ga.onclick=async()=>{const vals={};['HandlePowerKey','HandleLidSwitch','HandleLidSwitchExternalPower','HandleLidSwitchDocked'].forEach(k=>{if(P.lg[k])vals[k]=P.lg[k];});
+    if(!P.st.lid){delete vals.HandleLidSwitch;delete vals.HandleLidSwitchExternalPower;delete vals.HandleLidSwitchDocked;}
+    termAdd('$ pkexec → /etc/systemd/logind.conf.d/50-mors.conf','c');
+    if(!BRIDGE){P.lgDirty=false;termAdd('(имитация) сохранено','ok');renderSystem();return;}
+    ga.disabled=true;ga.textContent='Жду пароль…';
+    try{const r=await BRIDGE.call('setLogind',{values:vals});P.st.logind=r.logind;P.lg={...r.logind};P.lgDirty=false;
+      termAdd(r.now?'✓ кнопка питания и крышка — применено сразу':'✓ сохранено — применится после перезагрузки (этот systemd не перечитывает настройки на лету)','ok');}
+    catch(e){termAdd('✗ '+e.message,'err');}renderSystem();};}
 /* ---------- страница «Форматы» ---------- */
 const FMT_FIELDS=['label','comment','sep','tail','re','hook','quote','nest','open','close','join','src','srcTpl','check','sample'];
 const FS={sel:'conf',draft:null,isNew:false,timer:null,checkMsg:''};
