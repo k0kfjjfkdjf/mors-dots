@@ -63,7 +63,7 @@ for x in ex['options']:
 themes = {}
 for f in sorted((RICE / 'themes').glob('*.json')):
     t = json.loads(f.read_text())
-    themes[f.stem] = {k: t[k] for k in ('name', 'description', 'palette', 'accent', 'border')}
+    themes[f.stem] = t                        # целиком: редактор тем показывает и цвета терминала, и рамки
 rice_data = {'current': current, 'themes': themes, 'mocha': rice.MOCHA, 'hpTemplate': tpl}
 
 js = lambda o: json.dumps(o, ensure_ascii=False, separators=(',', ':')).replace('</', '<\\/')

@@ -25,6 +25,10 @@ hl.bind(key("V"),            hl.dsp.window.float({ action = "toggle" }))
 hl.bind(key("F"),            fsToggle(2, 2))   -- настоящий полный экран (игры, браузер без вкладок)
 hl.bind(key("SHIFT + F"),    fsToggle(2, 1))   -- поверх панели, вкладки остаются
 hl.bind(key("M"),            exec("command -v hyprshutdown >/dev/null 2>&1 && hyprshutdown || hyprctl dispatch 'hl.dsp.exit()'"))
+-- Меню питания (rofi): Super+Esc; кнопка питания — если в mors-settings для неё выбрано «показать меню»
+-- (иначе powermenu.sh key сразу выходит и кнопку обрабатывает systemd-logind)
+hl.bind(key("Escape"),       exec("~/.config/hypr/scripts/powermenu.sh"))
+hl.bind("XF86PowerOff",      exec("~/.config/hypr/scripts/powermenu.sh key"), { locked = true })
 
 -- Группы (вкладки)
 hl.bind(key("T"),            hl.dsp.group.toggle())

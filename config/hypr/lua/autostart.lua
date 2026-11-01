@@ -9,5 +9,7 @@ hl.on("hyprland.start", function()
     -- простой: блокировка, экраны, сон. Конфиг hypridle.conf пишет mors-settings → Система → Электропитание;
     -- пока его нет, hypridle сразу выходит и ничего не делает
     hl.exec_cmd("hypridle")
+    -- батарея (предупредить / критично) и режим производительности; без ~/.config/hypr/power.env сразу выходит
+    hl.exec_cmd("~/.config/hypr/scripts/power.sh watch")
     -- hl.exec_cmd("env QT_QPA_PLATFORM=xcb AmneziaVPN")
 end)

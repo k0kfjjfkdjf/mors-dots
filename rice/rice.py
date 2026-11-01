@@ -685,12 +685,24 @@ def apply_wallpaper(t, transition="fade"):
 #   sddm   — ключи темы sddm-astronaut поверх цветов темы (FormPosition, Blur, DimBackground…)
 #   lock   — экран блокировки hyprlock: image (login | theme | screenshot), blur, brightness, clock, date
 LOGIN_FILE = RICE_DIR / "login.json"
+SDDM_RU = {     # подписи экрана входа по-русски (тема sddm-astronaut их переводит этими ключами)
+    "TranslatePlaceholderUsername": "Имя пользователя", "TranslatePlaceholderPassword": "Пароль",
+    "TranslateLogin": "Войти", "TranslateLoginFailedWarning": "Неверный пароль",
+    "TranslateCapslockWarning": "Включён Caps Lock", "TranslateSuspend": "Сон", "TranslateHibernate": "Гибернация",
+    "TranslateReboot": "Перезагрузка", "TranslateShutdown": "Выключение", "TranslateSessionSelection": "Сеанс",
+    "TranslateVirtualKeyboardButtonOn": "Экранная клавиатура", "TranslateVirtualKeyboardButtonOff": "Скрыть клавиатуру",
+}
 SDDM_KEYS = {   # что можно переопределить — и только это (остальное у темы rice)
     "FormPosition", "Blur", "BlurMax", "PartialBlur", "FullBlur", "DimBackground", "HaveFormBackground",
-    "CropBackground", "HourFormat", "DateFormat", "HeaderText", "HideVirtualKeyboard", "HideSystemButtons",
-    "RoundCorners", "ForceLastUser", "UseRealName",
+    "CropBackground", "BackgroundHorizontalAlignment", "BackgroundVerticalAlignment", "HourFormat", "DateFormat",
+    "HeaderText", "HideVirtualKeyboard", "VirtualKeyboardPosition", "HideSystemButtons", "HideLoginButton",
+    "RoundCorners", "ScreenPadding", "Font", "FontSize", "ForceLastUser", "UseRealName", "PasswordFocus",
+    "HideCompletePassword", *SDDM_RU,
 }
-LOCK_DEFAULTS = {"image": "login", "blur": 2, "brightness": 0.75, "clock": True, "date": True, "font": "Sans"}
+LOCK_DEFAULTS = {"image": "login", "blur": 2, "brightness": 0.75, "clock": True, "date": True, "font": "Sans",
+                 "layout": "center", "clockSize": 84, "clockFormat": "24", "dateFormat": "long", "greeting": "",
+                 "avatar": "", "inputWidth": 320, "placeholder": "Пароль…", "showLayout": True,
+                 "fingerprint": False, "animations": True}
 
 
 def login_settings():
@@ -753,8 +765,11 @@ def apply_sddm(t):
         "HoverSystemButtonsIconsColor": P, "HoverSessionButtonTextColor": P,
         "HoverVirtualKeyboardButtonTextColor": P,
     }
-    user = login_settings().get("sddm") or {}
-    conf.update({k: str(v).replace('"', "'") for k, v in user.items() if k in SDDM_KEYS})
+    ls = login_settings()
+    if ls.get("russian", True):
+        conf.update(SDDM_RU)
+    user = ls.get("sddm") or {}
+    conf.update({k: str(v).replace('"', "'").replace("\n", " ") for k, v in user.items() if k in SDDM_KEYS})
     text = f"# Сгенерировано rice.py — {t.raw['name']}\n[General]\n" + "".join(f'{k}="{v}"\n' for k, v in conf.items())
     write(SDDM_DIR / "sddm.conf.user", text)
     save_png(login_image(t), SDDM_DIR / "sddm-bg.png")
@@ -769,9 +784,11 @@ def hl_color(h, alpha=None):
 
 def apply_hyprlock(t):
     """~/.config/hypr/hyprlock.conf в цветах темы. Без этого файла hyprlock не запускается вовсе —
-    и блокировка по простою (hypridle) ничего бы не делала."""
+    и блокировка по простою (hypridle) ничего бы не делала. Элементы ставятся столбиком сами:
+    раскладка center / left / bottom, лишнее (аватар, приветствие, дата…) просто выпадает."""
     p, P = t.p, t.primary
     L = {**LOCK_DEFAULTS, **(login_settings().get("lock") or {})}
+    clean = lambda v: str(v).replace("\n", " ").strip()
     if L["image"] == "screenshot":
         bg = "screenshot"
     else:
@@ -779,29 +796,65 @@ def apply_hyprlock(t):
         bg = str(img) if img else ""
     blur = max(0, min(4, int(L.get("blur") or 0)))
     bright = max(0.2, min(1.0, float(L.get("brightness") or 1)))
-    font = str(L.get("font") or "Sans").replace("\n", " ")
+    font = clean(L.get("font") or "Sans")
+    csize = max(32, min(180, int(L.get("clockSize") or 84)))
+    iw = max(200, min(560, int(L.get("inputWidth") or 320)))
     out = [f"# Сгенерировано rice.py — {t.raw['name']}. Вид меняется в mors-settings → Система → Экран входа и блокировки.",
-           "general {", "    hide_cursor = true", "    ignore_empty_input = true", "}", "",
-           "background {", "    monitor =", f"    path = {bg}", f"    color = {hl_color(p['base'])}",
-           f"    blur_passes = {blur}", "    blur_size = 7", f"    brightness = {bright:.2f}", "}", "",
-           "input-field {", "    monitor =", "    size = 320, 54", "    outline_thickness = 2", "    rounding = 14",
-           f"    outer_color = {hl_color(P)} {hl_color(t.secondary)} 45deg",
-           f"    inner_color = {hl_color(p['crust'], 0xcc)}", f"    font_color = {hl_color(p['text'])}",
-           f"    check_color = {hl_color(t.secondary)}", f"    fail_color = {hl_color(p['red'])}",
-           f"    capslock_color = {hl_color(p['yellow'] if 'yellow' in p else P)}",
-           f"    font_family = {font}", "    placeholder_text = <i>Пароль…</i>", "    fail_text = <i>$PAMFAIL</i>",
-           "    fade_on_empty = false", "    dots_spacing = 0.3",
-           "    position = 0, -60", "    halign = center", "    valign = center", "}"]
+           "general {", "    hide_cursor = true", "    ignore_empty_input = true", "}",
+           "animations {", f"    enabled = {'true' if L.get('animations', True) else 'false'}", "}"]
+    if L.get("fingerprint"):
+        out += ["auth {", "    fingerprint {", "        enabled = true",
+                "        ready_message = Приложи палец или введи пароль", "        present_message = Сканирую отпечаток…", "    }", "}"]
+    out += ["", "background {", "    monitor =", f"    path = {bg}", f"    color = {hl_color(p['base'])}",
+            f"    blur_passes = {blur}", "    blur_size = 7", f"    brightness = {bright:.2f}", "}"]
+    # элементы сверху вниз: (высота, строки виджета без position/halign/valign)
+    items = []
+    av = clean(L.get("avatar") or "")
+    if av:
+        avp = Path(os.path.expanduser(av))
+        if avp.is_file():
+            items.append((126, ["image {", "    monitor =", f"    path = {avp}", "    size = 110", "    rounding = -1",
+                                "    border_size = 3", f"    border_color = {hl_color(P)} {hl_color(t.secondary)} 45deg"]))
+    g = L.get("greeting") or ""
+    if g:
+        text = "Привет, $USER" if g == "user" else clean(g)
+        items.append((40, ["label {", "    monitor =", f"    text = {text}", "    font_size = 18", f"    font_family = {font}",
+                           f"    color = {hl_color(p['subtext1'])}"]))
     if L.get("clock", True):
-        out += ["", "label {", "    monitor =", "    text = $TIME", "    font_size = 84", f"    font_family = {font}",
-                f"    color = {hl_color(p['text'])}", "    position = 0, 160", "    halign = center", "    valign = center", "}"]
+        fmt = {"24": "$TIME", "12": "$TIME12", "24s": 'cmd[update:1000] date +"%H:%M:%S"'}.get(L.get("clockFormat"), "$TIME")
+        items.append((int(csize * 1.3), ["label {", "    monitor =", f"    text = {fmt}", f"    font_size = {csize}",
+                                         f"    font_family = {font}", f"    color = {hl_color(p['text'])}"]))
     if L.get("date", True):
-        out += ["", "label {", "    monitor =", '    text = cmd[update:60000] LC_TIME=ru_RU.UTF-8 date +"%A, %-d %B"',
-                "    font_size = 20", f"    font_family = {font}", f"    color = {hl_color(p['subtext1'])}",
-                "    position = 0, 80", "    halign = center", "    valign = center", "}"]
-    out += ["", "label {", "    monitor =", "    text = $LAYOUT[en,ru]", "    font_size = 14", f"    font_family = {font}",
-            f"    color = {hl_color(p['overlay1'])}", "    position = 0, -120", "    halign = center", "    valign = center", "}", ""]
-    write(CFG / "hypr/hyprlock.conf", "\n".join(out))
+        df = {"long": "%A, %-d %B", "full": "%A, %-d %B %Y", "short": "%d.%m.%Y"}.get(L.get("dateFormat"), "%A, %-d %B")
+        items.append((40, ["label {", "    monitor =", f'    text = cmd[update:60000] LC_TIME=ru_RU.UTF-8 date +"{df}"',
+                           "    font_size = 20", f"    font_family = {font}", f"    color = {hl_color(p['subtext1'])}"]))
+    items.append((54 + 26, ["input-field {", "    monitor =", f"    size = {iw}, 54", "    outline_thickness = 2", "    rounding = 14",
+                            f"    outer_color = {hl_color(P)} {hl_color(t.secondary)} 45deg",
+                            f"    inner_color = {hl_color(p['crust'], 0xcc)}", f"    font_color = {hl_color(p['text'])}",
+                            f"    check_color = {hl_color(t.secondary)}", f"    fail_color = {hl_color(p['red'])}",
+                            f"    capslock_color = {hl_color(p.get('yellow', P))}", f"    font_family = {font}",
+                            f"    placeholder_text = <i>{clean(L.get('placeholder') or 'Пароль…')}</i>",
+                            "    fail_text = <i>$PAMFAIL</i>", "    fade_on_empty = false", "    dots_spacing = 0.3"]))
+    if L.get("showLayout", True):
+        items.append((30, ["label {", "    monitor =", "    text = $LAYOUT[en,ru]", "    font_size = 14", f"    font_family = {font}",
+                           f"    color = {hl_color(p['overlay1'])}"]))
+    lay = L.get("layout") if L.get("layout") in ("center", "left", "bottom") else "center"
+    total = sum(h for h, _ in items)
+    if lay == "bottom":                  # столбик у нижнего края: y — от низа экрана
+        y = 70
+        placed = []
+        for h, w in reversed(items):
+            placed.append((w, f"0, {y}", "center", "bottom")); y += h
+        placed.reverse()
+    else:                                # по центру экрана (left — тот же столбик у левого края)
+        top = total / 2
+        placed = []
+        for h, w in items:
+            cy = round(top - h / 2); top -= h
+            placed.append((w, f"{'140' if lay == 'left' else '0'}, {cy}", "left" if lay == "left" else "center", "center"))
+    for w, pos, ha, va in placed:
+        out += [""] + w + [f"    position = {pos}", f"    halign = {ha}", f"    valign = {va}", "}"]
+    write(CFG / "hypr/hyprlock.conf", "\n".join(out) + "\n")
     return "ok" if bg else "нет обоев у темы — фон будет цветом"
 
 

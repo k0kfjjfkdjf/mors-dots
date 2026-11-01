@@ -1,9 +1,10 @@
 #!/usr/bin/env bash
 # Меню выбора темы (SUPER+SHIFT+T)
 RICE="$HOME/.config/rice/rice.py"
+n=$(python3 "$RICE" list | wc -l); (( n > 8 )) && n=8; (( n < 1 )) && n=1
 choice=$(python3 "$RICE" list | sed 's/^\* /●  /; s/^  /   /' | rofi -dmenu -i -no-custom -p "Тема" \
-    -theme-str 'window { location: center; anchor: center; width: 640px; height: 300px; }
-                listview { lines: 3; }
+    -theme-str 'window { location: center; anchor: center; width: 640px; }
+                listview { lines: '"$n"'; }
                 element-icon { enabled: false; }
                 inputbar { children: [ "prompt", "entry" ]; }') || exit 0
 name=$(sed 's/^[● ]*//' <<<"$choice" | awk '{print $1}')

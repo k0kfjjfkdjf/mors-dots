@@ -1,0 +1,64 @@
+/* Меню питания (config/hypr/scripts/powermenu.sh). Цвета — из colors.rasi, их пишет rice.py под тему. */
+@import "colors.rasi"
+@import "fonts.rasi"
+
+configuration {
+    show-icons: false;
+}
+
+* {
+    background-color: transparent;
+    text-color:       var(on-surface);
+}
+
+window {
+    location:         center;
+    anchor:           center;
+    width:            380px;
+    border-radius:    20px;
+    border:           2px solid;
+    border-color:     var(primary);
+    background-color: var(surface);
+    padding:          18px;
+}
+
+mainbox {
+    spacing:  12px;
+    children: [ "message", "listview" ];
+}
+
+message {
+    padding:          10px 14px;
+    border-radius:    12px;
+    background-color: var(surface-container);
+}
+
+textbox {
+    text-color:       var(on-surface-variant);
+    horizontal-align: 0.5;
+}
+
+listview {
+    spacing:      6px;
+    fixed-height: false;
+    scrollbar:    false;
+    cycle:        true;
+}
+
+element {
+    padding:          12px 16px;
+    border-radius:    12px;
+    background-color: var(surface-container-low);
+}
+
+element selected {
+    background-color: var(primary);
+    background-image: var(gradient);
+    text-color:       var(on-primary);
+}
+
+element-text {
+    text-color:      inherit;
+    vertical-align:  0.5;
+    font:            "Geist 13";
+}

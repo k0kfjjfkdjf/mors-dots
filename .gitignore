@@ -11,6 +11,7 @@ rice/login.json
 
 # пишет mors-settings (Система → Электропитание): у каждой машины своё
 config/hypr/hypridle.conf
+config/hypr/power.env
 
 # машинное: ссылку создаёт install.sh
 config/hypr/lua/host.lua

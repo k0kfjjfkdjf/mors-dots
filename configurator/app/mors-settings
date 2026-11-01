@@ -158,6 +158,95 @@ class Backend:
         code = self.rice('apply', name)
         return {'ok': code == 0, 'code': code}
 
+    # ---------------------------------------------------------------- темы: свои, правка, удаление
+    PALETTE_KEYS = ('crust', 'mantle', 'base', 'base2', 'surface0', 'surface1', 'surface2', 'overlay0', 'overlay1',
+                    'overlay2', 'subtext0', 'subtext1', 'text', 'rosewater', 'flamingo', 'pink', 'mauve', 'red',
+                    'maroon', 'peach', 'yellow', 'green', 'teal', 'sky', 'sapphire', 'blue', 'lavender')
+
+    def cmd_themes(self):
+        out = {}
+        for f in sorted((RICE / 'themes').glob('*.json')):
+            try:
+                out[f.stem] = json.loads(f.read_text())
+            except ValueError:
+                continue
+        return {'themes': out, 'current': self.current_theme()}
+
+    def _check_theme(self, t):
+        import re
+        hx = lambda v, a=False: isinstance(v, str) and re.fullmatch(r'#[0-9a-fA-F]{6}' + ('([0-9a-fA-F]{2})?' if a else ''), v)
+        if not isinstance(t, dict):
+            raise ValueError('тема — объект')
+        name = str(t.get('name') or '').strip()
+        if not name:
+            raise ValueError('у темы нет названия')
+        pal = t.get('palette') or {}
+        bad = [k for k in self.PALETTE_KEYS if not hx(pal.get(k))]
+        if bad:
+            raise ValueError('палитра: нет или неверный цвет ' + ', '.join(bad))
+        acc = t.get('accent') or {}
+        for k in ('primary', 'secondary', 'tertiary'):
+            v = acc.get(k)
+            if not (v in pal or hx(v)):
+                raise ValueError(f'акцент {k}: имя цвета палитры или #rrggbb')
+        ansi = t.get('ansi') or []
+        if len(ansi) != 16 or not all(hx(c) for c in ansi):
+            raise ValueError('цвета терминала: нужно ровно 16 цветов #rrggbb')
+        border = t.get('border') or []
+        if not border or not all(hx(c, True) for c in border):
+            raise ValueError('рамка: хотя бы один цвет #rrggbb[aa]')
+        if not hx(t.get('border_inactive'), True):
+            raise ValueError('рамка неактивного окна: #rrggbb[aa]')
+        return {'name': name, 'description': str(t.get('description') or '').strip(),
+                'palette': {k: pal[k].lower() for k in self.PALETTE_KEYS},
+                'accent': {k: acc[k] for k in ('primary', 'secondary', 'tertiary')},
+                'ansi': [c.lower() for c in ansi], 'border': [c.lower() for c in border],
+                'border_inactive': t['border_inactive'].lower(),
+                'border_angle': int(t.get('border_angle', 45)) % 360, 'border_loop': bool(t.get('border_loop'))}
+
+    def cmd_saveTheme(self, id, theme, wallpaper=None, wallpaperFile=None, apply=False):
+        """rice/themes/<id>.json. wallpaper — PNG (data:-URI, рисует окно из палитры) → default.png новой темы;
+        wallpaperFile — своя картинка, копируется в папку темы. apply — сразу rice.py apply."""
+        import re, base64
+        if not re.fullmatch(r'[a-z0-9][a-z0-9-]{0,30}', str(id or '')):
+            raise ValueError('id темы: латиница, цифры и -, до 31 знака')
+        data = self._check_theme(theme)
+        f = RICE / 'themes' / f'{id}.json'
+        tmp = f.with_name(f.name + '.tmp')
+        tmp.write_text(json.dumps(data, ensure_ascii=False, indent=2) + '\n')
+        os.replace(tmp, f)
+        wdir = RICE / 'wallpapers' / id
+        wdir.mkdir(parents=True, exist_ok=True)
+        added = []
+        if wallpaper and str(wallpaper).startswith('data:image/png;base64,'):
+            (wdir / 'default.png').write_bytes(base64.b64decode(str(wallpaper).split(',', 1)[1]))
+            added.append('default.png')
+        if wallpaperFile:
+            src = pathlib.Path(os.path.expanduser(str(wallpaperFile)))
+            if src.is_file():
+                dst = wdir / src.name
+                if dst.exists() and dst.read_bytes() != src.read_bytes():
+                    dst = wdir / f'{src.stem}-{int(src.stat().st_mtime)}{src.suffix}'
+                shutil.copy2(src, dst)
+                added.append(dst.name)
+                try:                                      # своя картинка — сразу выбранные обои темы
+                    self._rice_mod().select_wallpaper(id, dst)
+                except Exception:
+                    pass
+        code = self.rice('apply', id) if apply else 0
+        return {'ok': code == 0, 'added': added, **self.cmd_themes()}
+
+    def cmd_deleteTheme(self, id):
+        if id == self.current_theme():
+            raise ValueError('это текущая тема — сначала включи другую')
+        f = RICE / 'themes' / f'{id}.json'
+        if not f.is_file():
+            raise ValueError(f'нет темы {id}')
+        if len(list((RICE / 'themes').glob('*.json'))) <= 1:
+            raise ValueError('последнюю тему удалить нельзя')
+        f.unlink()
+        return {'ok': True, 'kept': str(RICE / 'wallpapers' / id), **self.cmd_themes()}
+
     # ---------------------------------------------------------------- обновление
     def cmd_updateRice(self):
         if not (DOTS / '.git').exists():
@@ -233,11 +322,11 @@ class Backend:
             data = {}
         sddm_dir = pathlib.Path(os.environ.get('RICE_SDDM_DIR', '/var/lib/rice'))
         img = data.get('image') or 'theme'
-        if img == 'theme':
+        img_path = None
+        if img == 'theme' and self.current_theme():
             try:
-                t = self._rice_mod().Theme(self.current_theme())
-                img_path = t.wallpaper
-            except Exception:
+                img_path = self._rice_mod().Theme(self.current_theme()).wallpaper
+            except (Exception, SystemExit):      # rice.py на неизвестной теме делает sys.exit
                 img_path = None
         else:
             img_path = pathlib.Path(os.path.expanduser(img))
@@ -299,6 +388,45 @@ class Backend:
         return battery, backlight, lid
 
     @staticmethod
+    def _kbd_backlight():
+        return any(pathlib.Path('/sys/class/leds').glob('*kbd_backlight*'))
+
+    @staticmethod
+    def _profiles():
+        """power-profiles-daemon: доступные режимы и текущий; None — не установлен."""
+        if not shutil.which('powerprofilesctl'):
+            return None
+        code, out = run(['powerprofilesctl', 'list'], timeout=5)
+        import re
+        names = re.findall(r'^\s*\*?\s*([a-z-]+):\s*$', out, re.M) if code == 0 else []
+        code, cur = run(['powerprofilesctl', 'get'], timeout=5)
+        return {'list': names or ['performance', 'balanced', 'power-saver'], 'current': cur.strip() if code == 0 else ''}
+
+    POWER_ENV = HOME / '.config/hypr/power.env'
+    MENU_ITEMS = ('lock', 'suspend', 'hibernate', 'reboot', 'poweroff', 'logout')
+
+    def _write_power_env(self, s):
+        """~/.config/hypr/power.env — для power.sh watch (батарея, режимы) и powermenu.sh (меню питания)."""
+        import shlex
+        menu = s.get('menu') or {}
+        items = [i for i in (menu.get('items') or ['lock', 'suspend', 'reboot', 'poweroff', 'logout']) if i in self.MENU_ITEMS]
+        conf = [i for i in (menu.get('confirm') or []) if i in self.MENU_ITEMS]
+        bat = s.get('battery') or {}
+        prof = s.get('profiles') or {}
+        act = bat.get('critAction') if bat.get('critAction') in self.POWER_ACTIONS else 'hibernate'
+        locked = menu.get('locked') if menu.get('locked') in ('suspend', 'poweroff', 'hibernate', 'ignore') else 'suspend'
+        env = {'MENU_KEY': '1' if menu.get('key') else '0', 'MENU_ITEMS': ' '.join(items), 'MENU_CONFIRM': ' '.join(conf),
+               'LOCKED_KEY': locked, 'BAT_WARN': str(int(bat.get('warn') or 0)), 'BAT_CRIT': str(int(bat.get('crit') or 0)),
+               'BAT_CRIT_ACTION': act, 'PROFILE_AC': str(prof.get('ac') or ''), 'PROFILE_BAT': str(prof.get('bat') or '')}
+        self.POWER_ENV.parent.mkdir(parents=True, exist_ok=True)
+        self.POWER_ENV.write_text('# mors-settings → Система → Электропитание (читают power.sh watch и powermenu.sh)\n'
+                                  + ''.join(f'{k}={shlex.quote(v)}\n' for k, v in env.items()))
+        need_watch = (int(bat.get('warn') or 0) or int(bat.get('crit') or 0)) and self._hw()[0] or prof.get('ac') or prof.get('bat')
+        if need_watch:                                    # второй экземпляр сам выйдет (flock)
+            subprocess.Popen([str(DOTS / 'config/hypr/scripts/power.sh'), 'watch'], start_new_session=True,
+                             stdin=subprocess.DEVNULL, stdout=subprocess.DEVNULL, stderr=subprocess.DEVNULL)
+
+    @staticmethod
     def _can(what):
         """systemd-logind: можно ли сейчас suspend/hibernate (yes/no/na/challenge)."""
         code, out = run(['busctl', 'call', 'org.freedesktop.login1', '/org/freedesktop/login1',
@@ -335,7 +463,20 @@ class Backend:
             code, _ = run([str(DOTS / 'config/hypr/scripts/power.sh'), 'source', 'bat'], timeout=5)
             on_bat = code == 0
         code, _ = run(['pgrep', '-x', 'hypridle'], timeout=5)
+        cap = None
+        if battery:
+            vals = []
+            for d in pathlib.Path(os.environ.get('POWER_SUPPLY_DIR', '/sys/class/power_supply')).glob('*'):
+                try:
+                    if (d / 'type').read_text().strip() == 'Battery' and (d / 'capacity').exists() and \
+                            not ((d / 'scope').exists() and (d / 'scope').read_text().strip() == 'Device'):
+                        vals.append(int((d / 'capacity').read_text()))
+                except (OSError, ValueError):
+                    pass
+            cap = round(sum(vals) / len(vals)) if vals else None
         return {'settings': self.settings().get('power'), 'battery': battery, 'backlight': backlight, 'lid': lid,
+                'capacity': cap, 'kbd': self._kbd_backlight(), 'profiles': self._profiles(),
+                'fprint': bool(shutil.which('fprintd-verify')),
                 'onBattery': on_bat, 'hypridle': bool(shutil.which('hypridle')), 'hypridleRunning': code == 0,
                 'hypridleConf': self.HYPRIDLE_CONF.is_file(), 'hyprlockConf': (HOME / '.config/hypr/hyprlock.conf').is_file(),
                 'brightnessctl': bool(shutil.which('brightnessctl')),
@@ -358,16 +499,29 @@ class Backend:
             c = s.get(src) or {}
             cond = f'    condition_cmd = {sh} source {src}' if battery else None
             steps = []
-            if backlight and int(c.get('dim') or 0) > 0 and shutil.which('brightnessctl'):
-                steps.append((c['dim'], 'приглушить подсветку', 'brightnessctl -s set 10%', 'brightnessctl -r'))
-            if int(c.get('lock') or 0) > 0:
+            lvl = max(1, min(80, int(s.get('dimLevel') or 10)))
+            if backlight and float(c.get('dim') or 0) > 0 and shutil.which('brightnessctl'):
+                steps.append((c['dim'], 'приглушить подсветку', f'brightnessctl -s set {lvl}%', 'brightnessctl -r'))
+            if s.get('kbdOff') and self._kbd_backlight() and shutil.which('brightnessctl'):
+                first = min([float(c.get(k) or 0) for k in ('dim', 'lock', 'screen') if float(c.get(k) or 0) > 0] or [0])
+                if first:
+                    steps.append((first, 'погасить подсветку клавиатуры', "brightnessctl -sd '*::kbd_backlight' set 0",
+                                  "brightnessctl -rd '*::kbd_backlight'"))
+            if float(c.get('lock') or 0) > 0:
                 steps.append((c['lock'], 'заблокировать', 'loginctl lock-session', ''))
-            if int(c.get('screen') or 0) > 0:
+            if float(c.get('screen') or 0) > 0:
                 steps.append((c['screen'], 'погасить экраны', f'{sh} dpms off', f'{sh} dpms on'))
-            if int(c.get('sleep') or 0) > 0:
+            if float(c.get('sleep') or 0) > 0:
                 act = c.get('action') if c.get('action') in self.POWER_ACTIONS else 'suspend'
+                warn = int(s.get('warnSleep') or 0)
+                names = {'suspend': 'сон', 'hibernate': 'гибернация', 'poweroff': 'выключение',
+                         'suspend-then-hibernate': 'сон', 'hybrid-sleep': 'сон'}
+                if warn and float(c['sleep']) * 60 > warn + 10:
+                    steps.append(((float(c['sleep']) * 60 - warn) / 60, f'предупредить за {warn} с',
+                                  f'notify-send -a power -u normal "Через {warn} с — {names.get(act, act)}" '
+                                  f'"Пошевели мышью или нажми клавишу, чтобы отменить"', ''))
                 steps.append((c['sleep'], act, f'{sh} sleep {act}', ''))
-            for minutes, what, on_t, on_r in steps:
+            for minutes, what, on_t, on_r in sorted(steps, key=lambda x: float(x[0])):
                 out += ['', f'# {title + ": " if title else ""}{float(minutes):g} мин — {what}', 'listener {',
                         f'    timeout = {int(round(float(minutes) * 60))}', f'    on-timeout = {q(on_t)}']
                 if on_r:
@@ -383,10 +537,14 @@ class Backend:
             raise ValueError('ожидается объект настроек')
         for src in ('ac', 'bat'):
             for k in ('dim', 'lock', 'screen', 'sleep'):
-                v = float((settings.get(src) or {}).get(k) or 0)
+                v = float((settings.get(src) or {}).get(k) or 0)   # минуты, можно дробные
                 if v < 0 or v > 24 * 60:
                     raise ValueError(f'{k}: от 0 до 1440 минут')
+        old = self.settings().get('power') or {}
+        if 'menu' in old:                                 # кнопку питания меняет setLogind — не затирать
+            settings.setdefault('menu', {})['key'] = (old.get('menu') or {}).get('key', False)
         self.save_settings(power=settings)
+        self._write_power_env(settings)
         battery, backlight, _ = self._hw()
         run(['pkill', '-x', 'hypridle'], timeout=5)
         if not settings.get('enabled'):
@@ -413,7 +571,11 @@ class Backend:
 
     def cmd_setLogind(self, values):
         """Крышка и кнопка питания — это systemd-logind, файл в /etc: пишем через pkexec (спросит пароль)."""
-        vals = {k: v for k, v in (values or {}).items() if k in self.LOGIND_KEYS and v in self.LOGIND_VALUES}
+        values = dict(values or {})
+        menu_key = values.get('HandlePowerKey') == 'menu'     # «показать меню»: logind кнопку отпускает, её ловит Hyprland
+        if menu_key:
+            values['HandlePowerKey'] = 'ignore'
+        vals = {k: v for k, v in values.items() if k in self.LOGIND_KEYS and v in self.LOGIND_VALUES}
         if not vals:
             raise ValueError('нечего сохранять')
         if not shutil.which('pkexec'):
@@ -437,7 +599,15 @@ class Backend:
             raise RuntimeError('отменено — пароль не введён')
         if code != 0:
             raise RuntimeError(out or f'pkexec: код {code}')
-        return {'ok': True, 'now': 'reloaded' in out, 'logind': self._logind_now()}
+        pw = self.settings().get('power') or {}
+        pw.setdefault('menu', {})['key'] = menu_key
+        self.save_settings(power=pw)
+        self._write_power_env(pw)
+        return {'ok': True, 'now': 'reloaded' in out, 'logind': self._logind_now(), 'menuKey': menu_key}
+
+    def cmd_testPowerMenu(self):
+        subprocess.Popen([str(DOTS / 'config/hypr/scripts/powermenu.sh')], start_new_session=True, stdin=subprocess.DEVNULL)
+        return True
 
     # ---------------------------------------------------------------- скрипты и кнопки
     def cmd_scripts(self):
@@ -1242,7 +1412,7 @@ def main():
                         args = {'open': self.open_page}
                         self.open_page = None
                     self.reply(msg['id'], True, fn(**args))
-                except Exception as e:  # ошибка уходит в интерфейс тостом
+                except (Exception, SystemExit) as e:  # ошибка уходит в интерфейс тостом (SystemExit — из rice.py)
                     self.reply(msg['id'], False, str(e))
             threading.Thread(target=work, daemon=True).start()
 
