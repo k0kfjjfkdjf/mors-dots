@@ -264,6 +264,11 @@ details.lmore{margin:10px 0 2px}details.lmore summary{cursor:pointer;color:var(-
 .tansi{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:6px 10px;margin-bottom:10px}
 .tcol{display:flex;align-items:center;gap:8px;font-size:12.5px;cursor:pointer}
 .tcol span{display:flex;flex-direction:column;line-height:1.25}.tcol small{font-family:var(--mono);font-size:10.5px;color:var(--dim)}
+.tcol em{font-style:normal;font-size:10.5px;color:var(--muted)}.tsw2{grid-template-columns:repeat(auto-fill,minmax(230px,1fr))}
+.tcol[data-tu]{padding:4px;border-radius:8px}.tcol[data-tu]:hover{background:var(--panel2)}
+.twhere{background:var(--bg);border:1px solid var(--border);border-radius:10px;padding:10px 12px;font-size:12.5px;min-height:90px}
+.tuh{margin-bottom:6px}.tul{margin:0;padding-left:16px;display:flex;flex-direction:column;gap:3px;color:var(--muted)}.tul b{color:var(--text);font-weight:600}
+.lgrid label[data-tua] small{color:var(--dim);font-size:11px}
 .tcol input[type=color],.tbd input[type=color],.lgrid input[type=color]{width:34px;height:28px;border:1px solid var(--border);border-radius:7px;padding:0;cursor:pointer;flex:none}
 .tbd{display:inline-flex;align-items:center;gap:6px;margin:0 10px 6px 0}.tbd input[type=range]{width:80px}
 .tmock{border-radius:12px;padding:10px;display:flex;flex-direction:column;gap:8px;font-size:12px;border:1px solid var(--border)}
@@ -1944,6 +1949,59 @@ async function updateRice(){if(SYS.busy)return;
   catch(e){termAdd('✗ '+e.message,'err');}
   setBusy('');renderSystem();}
 /* ---------- редактор тем ---------- */
+/* Где какой цвет темы используется — по коду rice.py (Hyprland, kitty, GTK, Qt/KDE, fish, rofi, SDDM, hyprlock),
+   шаблону HyprPanel (каждый цвет шаблона Catppuccin → ближайший цвет палитры; в скобках — сколько элементов)
+   и самому окну настроек. Обновлять вместе с rice.py. */
+const COLOR_USES={
+  crust:{short:'самый тёмный фон, текст на акценте',uses:[['Окно настроек','фон всего окна'],['HyprPanel (21)','фон меню, всплывающих окон громкости/яркости, уведомлений; текст на цветных кнопках'],
+    ['Hyprland','тень окон; текст на вкладке активной группы'],['kitty','текст под курсором и на активной вкладке'],['GTK / Qt','текст на выделенном (на цвете акцента); фон «дополнительных» областей Qt'],
+    ['rofi','самый тёмный фон (surface-container-lowest); текст на выбранном пункте'],['SDDM','фон формы входа; текст кнопки «Войти»'],['hyprlock','фон поля пароля (полупрозрачный)'],['Обои новой темы','низ градиента']]},
+  mantle:{short:'фон панелей, заголовков, полос',uses:[['Окно настроек','боковая панель и шапка'],['kitty','полоса вкладок'],['GTK / Qt','фон списков и полей ввода, заголовков окон'],
+    ['rofi','фон строки поиска и пунктов (surface-container-low)'],['HyprPanel (16)','текст и значки на цветных кнопках панели'],['SDDM','фон выпадающих списков']]},
+  base:{short:'фон окон',uses:[['kitty','фон терминала'],['GTK / Qt / libadwaita','фон окон приложений'],['rofi','фон окна меню (surface)'],['HyprPanel (16)','фон карточек в меню, разделители'],
+    ['SDDM','фон под картинкой'],['hyprlock','фон, если картинки нет'],['Окно настроек','линии-разделители']]},
+  base2:{short:'фон кнопок панели, блоков, диалогов',uses:[['HyprPanel (31)','фон модулей на панели — самый заметный цвет панели'],['libadwaita','боковые панели, диалоги'],
+    ['GTK / Qt','чередующиеся строки, выключенные кнопки'],['rofi','фон блоков (surface-container), например сообщение в меню питания'],['Окно настроек','фон вложенных блоков'],['Обои новой темы','верх градиента']]},
+  surface0:{short:'кнопки, поля, подсказки, рамки',uses:[['GTK / Qt / libadwaita','фон кнопок, подсказок, карточек, всплывающих меню'],['kitty','неактивные вкладки'],
+    ['Hyprland','неактивные вкладки групп'],['HyprPanel (19)','выключенные элементы, рамки в меню'],['SDDM','поля «Имя» и «Пароль»'],['rofi','surface-container-high'],['Окно настроек','рамки и разделители'],
+    ['Терминал','color0 у сгенерированных тем']]},
+  surface1:{short:'наведение, выделение, рамка неактивного окна',uses:[['HyprPanel (15)','фон при наведении, бегунки переключателей'],['kitty','рамка неактивного окна-сплита'],
+    ['fish','фон выделенного текста'],['GTK','рамки выключенных элементов'],['rofi','рамки (outline-variant), surface-container-highest'],['SDDM','выделенный пункт списка'],
+    ['Hyprland','рамка неактивного окна у сгенерированных тем (border_inactive)'],['Окно настроек','поля ввода и кнопки']]},
+  surface2:{short:'рамки GTK, наведение',uses:[['GTK','рамки окон, полей и подсказок'],['HyprPanel (13)','фон некоторых элементов меню, выключенное'],['Окно настроек','наведение'],['Терминал','color8 у сгенерированных тем']]},
+  overlay0:{short:'неактивный текст, комментарии',uses:[['fish','комментарии и автоподсказка (серый «призрачный» текст)'],['GTK','текст выключенных элементов'],['rofi','рамки (outline)'],
+    ['HyprPanel (5)','бегунки'],['Окно настроек','приглушённые подписи']]},
+  overlay1:{short:'подсказки в полях',uses:[['SDDM','серый текст-подсказка в полях'],['hyprlock','подпись раскладки (en/ru)'],['GTK','текст выключенных кнопок'],['HyprPanel (1)','время в уведомлении']]},
+  overlay2:{short:'второстепенный текст',uses:[['Окно настроек','второстепенный текст и описания'],['HyprPanel (5)','неактивный текст в меню'],['fish','конец команды (; &)']]},
+  subtext0:{short:'тусклый текст',uses:[['kitty','текст неактивных вкладок'],['Qt / KDE','неактивный текст, заголовок неактивного окна'],['rofi','второстепенный текст (on-surface-variant)'],['fish','опции (--флаги)']]},
+  subtext1:{short:'вторичный текст',uses:[['SDDM','дата, надпись сверху, значки кнопок питания'],['hyprlock','дата и приветствие'],['fish','параметры команд'],['Окно настроек','кружки ползунков'],['Терминал','color7 у сгенерированных тем']]},
+  text:{short:'основной текст везде',uses:[['Все программы','обычный текст: kitty, GTK, Qt, rofi, fish, окно настроек'],['HyprPanel (24)','текст в меню'],['SDDM','время, текст в полях'],['hyprlock','часы, текст в поле пароля'],['Терминал','color15 у сгенерированных тем']]},
+  rosewater:{short:'светлый розовый',uses:[['Акцент','третий акцент у сгенерированных тем: ссылки в kitty, имя пользователя в fish']]},
+  flamingo:{short:'светлый коралловый',uses:[['HyprPanel (1)','занятые рабочие столы на панели']]},
+  pink:{short:'один из двух главных цветов HyprPanel',uses:[['HyprPanel (43)','значки, рамки и текст модулей на панели и в меню'],['Акцент','часто основной акцент (см. «Акценты»)']]},
+  mauve:{short:'лиловый: ссылки, escape',uses:[['HyprPanel (16)','активные элементы меню и модулей'],['GTK / Qt','посещённые ссылки'],['fish','escape-последовательности (\\n, \\t)'],['Окно настроек','лиловые метки']]},
+  red:{short:'ошибки и опасное',uses:[['Везде','ошибки и предупреждения об опасном'],['Hyprland','вкладки заблокированной группы'],['GTK / Qt / libadwaita','ошибки, кнопки удаления'],
+    ['fish','ошибочная команда, отмена'],['rofi','срочное (error)'],['HyprPanel (15)','кнопка выключения, уведомления-ошибки'],['SDDM','«Неверный пароль»'],['hyprlock','рамка поля при неверном пароле'],['Окно настроек','ошибки']]},
+  maroon:{short:'бордовый',uses:[['HyprPanel (15)','активные элементы и подписи в меню']]},
+  peach:{short:'персиковый: «изменено», перезагрузка',uses:[['HyprPanel (6)','перезагрузка, высокая температура'],['Окно настроек','отметка «изменено»']]},
+  yellow:{short:'предупреждения, Caps Lock',uses:[['GTK / Qt / libadwaita','предупреждения'],['kitty','рамка окна при звонке (bell)'],['hyprlock','рамка поля при включённом Caps Lock'],['HyprPanel (19)','значки, рамки модулей'],['Окно настроек','значения в тексте конфига']]},
+  green:{short:'успех, строки в кавычках',uses:[['GTK / Qt / libadwaita','«успешно»'],['fish','строки в кавычках'],['HyprPanel (15)','значки и текст модулей'],['Окно настроек','разметка, «готово»']]},
+  teal:{short:'бирюзовый',uses:[['fish','перенаправления (> | <)'],['HyprPanel (12)','значки, рамки, статусы']]},
+  sky:{short:'небесный',uses:[['fish','операторы (&& ||)'],['HyprPanel (20)','активные элементы, значки'],['Окно настроек','ключи в тексте конфига']]},
+  sapphire:{short:'ссылки',uses:[['GTK / Qt','ссылки']]},
+  blue:{short:'синий',uses:[['HyprPanel (1)','низкая температура']]},
+  lavender:{short:'второй из главных цветов HyprPanel',uses:[['HyprPanel (43)','подписи, активные пункты, рамки в меню, всплывающие окна громкости'],['Акцент','часто основной акцент у тем']]},
+};
+const ACCENT_USES={
+  primary:['Основной акцент',[['Hyprland','активная вкладка группы'],['kitty','курсор, активная вкладка, рамка активного сплита'],['GTK / Qt / libadwaita','выделение, фокус, главные кнопки'],
+    ['fish','команды, текущая папка'],['rofi','выбранный пункт, рамка'],['SDDM','кнопка «Войти», значки, выделение'],['hyprlock','рамка поля пароля (градиент с вторым)'],['Меню питания','рамка и выбранный пункт'],['Окно настроек','акцент: кнопки, переключатели']]],
+  secondary:['Второй акцент',[['fish','ключевые слова (if, for), имя компьютера'],['Qt / KDE','подсветка при наведении'],['SDDM','наведение, рамка выделения'],['hyprlock','рамка при проверке пароля, градиент'],['rofi','secondary'],['Окно настроек','второй цвет градиентов']]],
+  tertiary:['Третий акцент',[['kitty','ссылки'],['fish','имя пользователя'],['rofi','tertiary']]],
+};
+const ANSI_USES=['чёрный: фон некоторых программ в терминале','красный: ошибки, удалённые строки в git diff','зелёный: успех, добавленные строки, приглашение','жёлтый: предупреждения, изменённые файлы',
+  'синий: папки в ls, заголовки','пурпурный: особые файлы, ключевые слова','голубой: ссылки, символьные ссылки в ls','белый: обычный текст программ'];
+function usesHTML(key){const u=COLOR_USES[key];if(!u)return '';return `<div class="tuh"><b>${key}</b> — ${esc(u.short)}</div><ul class="tul">${u.uses.map(([a,r])=>`<li><b>${esc(a)}</b> — ${esc(r)}</li>`).join('')}</ul>`;}
+
 const PAL_GROUPS=[
   ['Фон',[['crust','самый тёмный'],['mantle','панели'],['base','окна'],['base2','блоки']]],
   ['Поверхности',[['surface0','рамки, разделители'],['surface1','поля, кнопки'],['surface2','наведение']]],
@@ -2031,16 +2089,20 @@ function renderThemeEditor(){const m=document.getElementById('themeModal');if(!m
   const accSel=k=>`<select data-tacc="${k}">${PAL_KEYS.map(x=>`<option value="${x}" ${t.accent[k]===x?'selected':''}>${x}</option>`).join('')}${PAL_KEYS.includes(t.accent[k])?'':`<option selected>${esc(t.accent[k])}</option>`}</select>`;
   const tabs=[['colors','Палитра'],['accent','Акценты и рамки'],['term','Терминал'],['gen','Сгенерировать']];
   let body='';
-  if(TE.tab==='colors')body=PAL_GROUPS.map(([g,ks])=>`<div class="tgrp"><div class="tgh">${g}</div><div class="tsw">${ks.map(([k,l])=>`<label class="tcol">${ci('palette.'+k,p[k],k)}<span>${l}<small>${k} · ${p[k]}</small></span></label>`).join('')}</div></div>`).join('');
+  const apps=k=>(COLOR_USES[k]?COLOR_USES[k].uses.map(u=>u[0].replace(/ \(\d+\)/,'')).filter((x,i,a)=>a.indexOf(x)===i).slice(0,4).join(' · '):'');
+  if(TE.tab==='colors')body=`<div class="sub" style="margin-bottom:10px">Наведи на цвет — справа появится, где именно он используется. Цифра у HyprPanel — сколько элементов панели берут этот цвет.</div>`+
+    PAL_GROUPS.map(([g,ks])=>`<div class="tgrp"><div class="tgh">${g}</div><div class="tsw tsw2">${ks.map(([k])=>`<label class="tcol" data-tu="${k}">${ci('palette.'+k,p[k],k)}<span>${esc((COLOR_USES[k]||{}).short||k)}<small>${k} · ${p[k]}</small><em>${esc(apps(k))}</em></span></label>`).join('')}</div></div>`).join('');
   else if(TE.tab==='accent')body=`<div class="tgrp"><div class="tgh">Акценты</div><div class="lgrid">
-      <label>Основной (кнопки, выделение)${accSel('primary')}</label><label>Второй (градиенты, наведение)${accSel('secondary')}</label><label>Третий${accSel('tertiary')}</label></div></div>
-    <div class="tgrp"><div class="tgh">Рамка активного окна — градиент</div><div class="tsw">${t.border.map((c,i)=>`<span class="tbd">${ci('border.'+i,c)}<input type="range" min="0" max="255" value="${parseInt(c.slice(7,9)||'ff',16)}" data-ta="border.${i}" title="прозрачность">${t.border.length>1?`<button class="btn small" data-tbdel="${i}">✕</button>`:''}</span>`).join('')}
+      ${['primary','secondary','tertiary'].map(k=>`<label data-tua="${k}">${ACCENT_USES[k][0]}${accSel(k)}<small>${esc(ACCENT_USES[k][1].map(u=>u[0]).join(' · '))}</small></label>`).join('')}</div>
+      <div class="sub" style="margin-top:6px">Акцент — это ссылка на цвет палитры: поменяешь в палитре <code>${esc(t.accent.primary)}</code> — поменяется и основной акцент.</div></div>
+    <div class="tgrp"><div class="tgh">Рамка активного окна — градиент</div><div class="sub" style="margin-bottom:8px">Только Hyprland: рамка окна в фокусе (2–4 цвета, справа — прозрачность). Неактивная рамка — у остальных окон.</div><div class="tsw">${t.border.map((c,i)=>`<span class="tbd">${ci('border.'+i,c)}<input type="range" min="0" max="255" value="${parseInt(c.slice(7,9)||'ff',16)}" data-ta="border.${i}" title="прозрачность">${t.border.length>1?`<button class="btn small" data-tbdel="${i}">✕</button>`:''}</span>`).join('')}
       ${t.border.length<4?'<button class="btn small" id="tbAdd">＋ цвет</button>':''}</div>
       <div class="lgrid" style="margin-top:8px"><label>Угол градиента<span class="lrng"><input type="range" min="0" max="359" value="${t.border_angle||0}" data-tnum="border_angle"><b>${t.border_angle||0}°</b></span></label>
         <label class="lchk"><input type="checkbox" data-tbool="border_loop" ${t.border_loop?'checked':''}>градиент бежит по кругу (анимация)</label>
         <label>Рамка неактивного окна<span class="tbd">${ci('border_inactive',t.border_inactive)}<input type="range" min="0" max="255" value="${parseInt(t.border_inactive.slice(7,9)||'ff',16)}" data-ta="border_inactive"></span></label></div></div>`;
   else if(TE.tab==='term')body=`<div class="tgrp"><div class="tgh">16 цветов терминала (kitty)</div>
-      <div class="tansi">${t.ansi.map((c,i)=>`<label class="tcol">${ci('ansi.'+i,c)}<span>${i<8?'':'ярк. '}${ANSI_NAMES[i%8]}<small>color${i}</small></span></label>`).join('')}</div>
+      <div class="sub" style="margin-bottom:10px">Эти цвета берут программы внутри терминала: ls, git, htop, fastfetch, vim… Яркие (8–15) — для выделенного текста и <b>жирного</b>.</div>
+      <div class="tansi">${t.ansi.map((c,i)=>`<label class="tcol" title="${esc(ANSI_USES[i%8])}">${ci('ansi.'+i,c)}<span>${i<8?'':'ярк. '}${ANSI_NAMES[i%8]}<small>color${i}</small><em>${esc(ANSI_USES[i%8].split(': ')[1])}</em></span></label>`).join('')}</div>
       <button class="btn small" id="tAnsiFrom">Собрать из палитры</button></div>`;
   else body=`<div class="tgrp"><div class="tgh">Из цвета</div><div class="sub">Выбери главный цвет (и, если хочешь, второй) — остальная палитра подстроится под него.</div>
       <div class="lgrid"><label>Главный<input type="color" id="gA" value="${accHex(t,'primary').slice(0,7)}"></label><label>Второй<span class="tbd"><input type="color" id="gB" value="${accHex(t,'secondary').slice(0,7)}"><label class="lchk"><input type="checkbox" id="gBon">использовать</label></span></label>
@@ -2056,6 +2118,7 @@ function renderThemeEditor(){const m=document.getElementById('themeModal');if(!m
       <div class="seg ttabs">${tabs.map(([k,l])=>`<button class="${TE.tab===k?'on':''}" data-ttab="${k}">${l}</button>`).join('')}</div>
       <div class="tbody">${body}</div></div>
     <div class="tmright">${themeMockHTML(t)}
+      <div class="twhere" id="teWhere">${TE.where?usesHTML(TE.where):'<div class="hint">Наведи на цвет слева — здесь будет, где он используется.</div>'}</div>
       <label class="lchk"><input type="checkbox" id="teTry" ${TE.tried?'checked':''}>примерить на окно настроек</label>
       ${TE.isNew?`<div class="lsub">Обои новой темы</div><select id="teWp"><option value="gen" ${TE.wpMode==='gen'?'selected':''}>нарисовать из цветов темы</option>${TE.wpFile?`<option value="file" ${TE.wpMode==='file'?'selected':''}>выбранная картинка</option>`:''}<option value="none" ${TE.wpMode==='none'?'selected':''}>без обоев — добавлю сам</option></select>`:''}
       <div class="ferr" id="teErr"></div>
@@ -2071,6 +2134,10 @@ function setPath(o,path,v){const ks=path.split('.');let x=o;for(let i=0;i<ks.len
 function getPath(o,path){return path.split('.').reduce((x,k)=>x[isNaN(k)?k:+k],o);}
 function bindThemeEditor(){const m=document.getElementById('themeModal'),t=TE.d,q=s=>m.querySelector(s);
   q('#teClose').onclick=closeThemeEditor;
+  const showWhere=html=>{const w=q('#teWhere');if(w)w.innerHTML=html;};
+  m.querySelectorAll('[data-tu]').forEach(el=>{const k=el.dataset.tu;el.onmouseenter=el.onfocusin=()=>{TE.where=k;showWhere(usesHTML(k));};});
+  m.querySelectorAll('[data-tua]').forEach(el=>{const k=el.dataset.tua;el.onmouseenter=()=>{TE.where=null;
+    showWhere(`<div class="tuh"><b>${ACCENT_USES[k][0]}</b> — сейчас <code>${esc(t.accent[k])}</code></div><ul class="tul">${ACCENT_USES[k][1].map(([a,r])=>`<li><b>${esc(a)}</b> — ${esc(r)}</li>`).join('')}</ul>`);};});
   q('#teName').oninput=e=>{t.name=e.target.value;};q('#teDesc').oninput=e=>{t.description=e.target.value;};
   if(TE.isNew)q('#teId').oninput=e=>{TE.id=e.target.value.toLowerCase().replace(/[^a-z0-9-]/g,'');};
   m.querySelectorAll('[data-ttab]').forEach(b=>b.onclick=()=>{TE.tab=b.dataset.ttab;renderThemeEditor();});
