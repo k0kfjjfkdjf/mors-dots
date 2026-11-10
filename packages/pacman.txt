@@ -75,3 +75,4 @@ noto-fonts-emoji
 # --- разное
 xdg-utils
 xdg-user-dirs
+gtk-layer-shell

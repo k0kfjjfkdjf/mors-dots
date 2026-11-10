@@ -25,3 +25,10 @@ hl.window_rule({
     match = { fullscreen_state_internal = 2, fullscreen_state_client = 2 },
     confine_pointer = true,
 })
+
+-- Щит Super+F (scripts/input-shield.py): появляется и исчезает мгновенно
+hl.layer_rule({
+    name  = "input-shield-no-anim",
+    match = { namespace = "^mors-input-shield$" },
+    no_anim = true,
+})
