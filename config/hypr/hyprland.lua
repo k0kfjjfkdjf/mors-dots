@@ -10,5 +10,6 @@ require("lua.appearance")
 require("lua.animations")
 require("lua.input")
 require("lua.windowrules")
+require("lua.pointer_lock")   -- Super+F: мышь не уходит на другой монитор
 require("lua.keybinds")
 require("lua.gestures")
