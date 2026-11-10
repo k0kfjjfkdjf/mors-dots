@@ -22,7 +22,7 @@ hl.bind("Print",             exec("flameshot gui"))   -- клавиша PrintScr
 -- Окна
 hl.bind(key("C"),            hl.dsp.window.close())
 hl.bind(key("V"),            hl.dsp.window.float({ action = "toggle" }))
-hl.bind(key("F"),            fsToggle(2, 2))   -- настоящий полный экран (игры, браузер без вкладок)
+hl.bind(key("F"),            fsToggle(2, 2))   -- настоящий полный экран (игры, браузер без вкладок); мышь не выходит за окно — windowrules.lua
 hl.bind(key("SHIFT + F"),    fsToggle(2, 1))   -- поверх панели, вкладки остаются
 hl.bind(key("M"),            exec("command -v hyprshutdown >/dev/null 2>&1 && hyprshutdown || hyprctl dispatch 'hl.dsp.exit()'"))
 -- Меню питания (rofi): Super+Esc; кнопка питания — если в mors-settings для неё выбрано «показать меню»
