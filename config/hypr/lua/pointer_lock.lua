@@ -6,10 +6,16 @@
 -- как только фокус ушёл на другой монитор или к окну на нём, курсор возвращается в ближайшую точку
 -- окна в полном экране, фокус — ему.
 --
+-- Щит: пока игра в полном экране и в фокусе, остальные мониторы накрыты невидимым слоем
+-- (scripts/input-shield.py) — клик по ним уходит в пустоту, даже если курсор успел туда заехать.
+--
 -- Намеренно уйти можно: с зажатым Super (Super+цифра, Super+стрелка — переход с клавиатуры) или
--- выключив полный экран (снова Super+F). Если окно ушло на скрытый рабочий стол — не держим.
+-- выключив полный экран (снова Super+F). Тогда и щит убирается. Если окно ушло на скрытый рабочий
+-- стол — не держим.
 
 local SUPER = { [133] = true, [134] = true }   -- Super_L / Super_R (keycode libinput + 8)
+local SHIELD = "~/.config/hypr/scripts/input-shield.py"
+local KILL_SHIELD = "pkill -f '[i]nput-shield.py'"   -- [i] — чтобы pkill не убил собственную оболочку
 local locked = nil                             -- "address:0x…" окна в полном экране 2/2
 local superDown = false
 local busy = false
@@ -46,6 +52,25 @@ local function pullBack(w)
     busy = false
 end
 
+-- щит: nil — убрать, иначе имя монитора с игрой (его не закрываем)
+local shieldFor = false                         -- false — ещё не знаем (после перечитывания конфига)
+local function shield(mon)
+    if mon == shieldFor then return end
+    shieldFor = mon
+    local cmd = KILL_SHIELD
+    if mon then
+        local ok, mons = pcall(hl.get_monitors)
+        if ok and mons and #mons > 1 then cmd = cmd .. "; exec " .. SHIELD .. " '" .. mon .. "'" end
+    end
+    pcall(hl.exec_cmd, cmd)
+end
+
+local function update()
+    local w = lockedWindow()
+    local ok, act = pcall(hl.get_active_window)
+    if w and ok and act and act.address == w.address then shield(w.monitor.name) else shield(nil) end
+end
+
 hl.on("window.fullscreen", function(w)
     if not w then return end
     local sel = "address:" .. w.address
@@ -54,6 +79,7 @@ hl.on("window.fullscreen", function(w)
     elseif locked == sel then
         locked = nil
     end
+    update()
 end)
 
 hl.on("input.keyboard.key", function(keycode, _, pressed)
@@ -61,17 +87,25 @@ hl.on("input.keyboard.key", function(keycode, _, pressed)
 end)
 
 hl.on("monitor.focused", function(mon)
-    if superDown or busy or not mon then return end
-    local w = lockedWindow()
-    if w and w.monitor.name ~= mon.name then pullBack(w) end
+    if not (superDown or busy or not mon) then
+        local w = lockedWindow()
+        if w and w.monitor.name ~= mon.name then pullBack(w) end
+    end
+    if not busy then update() end
 end)
 
 hl.on("window.active", function(a)
-    if superDown or busy or not a then return end
-    local w = lockedWindow()
-    if w and a.address ~= w.address and a.monitor and a.monitor.name ~= w.monitor.name then pullBack(w) end
+    if not (superDown or busy or not a) then
+        local w = lockedWindow()
+        if w and a.address ~= w.address and a.monitor and a.monitor.name ~= w.monitor.name then pullBack(w) end
+    end
+    if not busy then update() end
 end)
+
+hl.on("workspace.active", function() update() end)
+hl.on("window.close", function() update() end)
 
 -- окно уже было в полном экране до перечитывания конфига
 local ok, a = pcall(hl.get_active_window)
 if ok and isLockMode(a) then locked = "address:" .. a.address end
+update()                                        -- после перечитывания конфига: убрать старый щит или поставить новый
